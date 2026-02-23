@@ -17,7 +17,19 @@ const DEFAULT_POSITIONS = {
   settings:     [0, 1.5, 4],
 };
 
-export { DEFAULT_POSITIONS };
+// Forward-facing arc for immersive XR — all panels in front of user at ~1.5-2m
+const XR_POSITIONS = {
+  chat:         [-0.8, 1.4, -1.8],
+  tools:        [ 0,   0.8, -1.5],
+  media:        [ 0.9, 1.6, -1.6],
+  imagePreview: [ 0.5, 1.8, -1.5],
+  browser:      [-0.9, 1.6, -1.6],
+  kasa:         [ 1.2, 1.2, -1.4],
+  printer:      [-1.2, 1.2, -1.4],
+  settings:     [ 0,   1.0, -2.0],
+};
+
+export { DEFAULT_POSITIONS, XR_POSITIONS };
 
 /**
  * SpatialPanel — 3D panel wrapper.
@@ -34,6 +46,8 @@ export default function SpatialPanel({
   width = 420,
   height = 500,
   onMove,
+  onResize,
+  onRotate,
   children,
   xrContent,
   defaultAnchored = true,
@@ -46,7 +60,13 @@ export default function SpatialPanel({
     // Convert pixel dimensions to meters (approx 1px = 1mm)
     const xrW = width / 1000;
     const xrH = height / 1000;
-    const xrPos = position || DEFAULT_POSITIONS[id] || [0, 1, 0];
+    const xrPos = position || XR_POSITIONS[id] || DEFAULT_POSITIONS[id] || [0, 1, 0];
+
+    // Convert meter resize back to pixel dimensions for App state
+    const handleXRResize = onResize
+      ? (panelId, metersW, metersH) => onResize(panelId, Math.round(metersW * 1000), Math.round(metersH * 1000))
+      : undefined;
+
     return (
       <XRPanel
         id={id}
@@ -54,6 +74,9 @@ export default function SpatialPanel({
         width={xrW}
         height={xrH}
         onMove={onMove}
+        onResize={handleXRResize}
+        onRotate={onRotate}
+        faceUser
       >
         {xrContent}
       </XRPanel>

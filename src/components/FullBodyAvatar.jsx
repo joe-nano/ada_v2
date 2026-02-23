@@ -118,7 +118,7 @@ export function FullBodyAvatar({
 
   // Load model with animations
   const { scene, nodes, animations } = useGLTF(modelUrl);
-  const { actions, mixer, names } = useAnimations(animations, group);
+  const { actions, mixer, names } = useAnimations(animations || [], group);
 
   // Find the best matching animation clip for a given state
   const findAnimation = (state) => {

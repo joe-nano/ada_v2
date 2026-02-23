@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { XR, useXR } from '@react-three/xr';
+import { XR, XROrigin, useXR } from '@react-three/xr';
 import { xrStore } from '../xrStore';
 import { SpatialContext } from './spatialContext';
 import SpatialPanel from './SpatialPanel';
 import AvatarController from './AvatarController';
 import AvatarSwitch from './AvatarSwitch';
+import XRAudioBridge from './XRAudioBridge';
 
 /**
  * SpatialWorld - The single full-screen Canvas that replaces the entire 2D layout.
@@ -45,7 +46,7 @@ function GridFloor() {
  */
 function XRAvatarPlacement({ avatarMode, avatarPropsRef }) {
   return (
-    <group position={[0, 0, -2.5]}>
+    <group position={[0, 0, -2.0]}>
       <AvatarSwitch
         mode={avatarMode}
         audioDataRef={avatarPropsRef.audioDataRef}
@@ -65,7 +66,10 @@ function SceneContent({
   avatarPropsRef,
   panels,
   onPanelMove,
+  onPanelResize,
+  onPanelRotate,
   cameraEnabled,
+  audioHandlers,
 }) {
   const xrState = useXR();
   const isInXR = !!(xrState?.session);
@@ -89,6 +93,20 @@ function SceneContent({
 
       {/* Grid floor */}
       <GridFloor />
+
+      {/* XR origin — establishes the XR reference space */}
+      {isInXR && <XROrigin />}
+
+      {/* XR audio lifecycle — resumes AudioContexts on session start/end */}
+      {audioHandlers && (
+        <XRAudioBridge
+          ensureAiAudioContext={audioHandlers.ensureAiAudioContext}
+          startMic={audioHandlers.startMic}
+          startSpeechRec={audioHandlers.startSpeechRec}
+          isMutedRef={audioHandlers.isMutedRef}
+          isOpenAiFallbackRef={audioHandlers.isOpenAiFallbackRef}
+        />
+      )}
 
       {/* Avatar — XR: stationary life-sized, Desktop: with AvatarController */}
       {isInXR ? (
@@ -117,6 +135,8 @@ function SceneContent({
             height={p.height}
             xrContent={p.xrContent}
             onMove={onPanelMove}
+            onResize={onPanelResize}
+            onRotate={onPanelRotate}
           >
             {p.content}
           </SpatialPanel>
@@ -130,6 +150,9 @@ export default function SpatialWorld({
   avatarPropsRef = {},
   panels = [],
   onPanelMove,
+  onPanelResize,
+  onPanelRotate,
+  audioHandlers,
 }) {
   // Camera disable/enable for panel dragging
   const cameraEnabledRef = useRef(true);
@@ -170,7 +193,10 @@ export default function SpatialWorld({
             avatarPropsRef={avatarPropsRef}
             panels={panels}
             onPanelMove={onPanelMove}
+            onPanelResize={onPanelResize}
+            onPanelRotate={onPanelRotate}
             cameraEnabled={cameraEnabled}
+            audioHandlers={audioHandlers}
           />
         </SpatialContext.Provider>
       </XR>

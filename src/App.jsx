@@ -322,41 +322,60 @@ function App() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             micStreamRef.current = stream;
 
-            // Request 16kHz if possible; browsers may ignore but this works in most Chromium builds.
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-            micAudioContextRef.current = audioContext;
-            micSampleRateRef.current = audioContext.sampleRate || 16000;
-            const source = audioContext.createMediaStreamSource(stream);
-            micSourceNodeRef.current = source;
+            const isSafari = !!(window.webkitAudioContext && !window.AudioContext?.prototype?.createScriptProcessor);
 
-            // ScriptProcessorNode is deprecated but widely supported and simplest here.
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
-            micProcessorRef.current = processor;
+            if (isSafari && typeof MediaRecorder !== 'undefined') {
+                // Safari/visionOS: use MediaRecorder instead of deprecated ScriptProcessorNode
+                const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                micProcessorRef.current = recorder;
 
-            processor.onaudioprocess = (event) => {
-                if (isMutedRef.current) return;
-                const input = event.inputBuffer.getChannelData(0);
-                const int16 = new Int16Array(input.length);
-                for (let i = 0; i < input.length; i++) {
-                    const s = Math.max(-1, Math.min(1, input[i]));
-                    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-                }
-                socket.emit('mic_audio_chunk', { data: int16.buffer, sample_rate: micSampleRateRef.current });
+                recorder.ondataavailable = async (event) => {
+                    if (isMutedRef.current || !event.data.size) return;
+                    const arrayBuffer = await event.data.arrayBuffer();
+                    socket.emit('mic_audio_chunk', { data: arrayBuffer, format: 'webm', sample_rate: 16000 });
 
-                if (!micSentFirstChunkRef.current) {
-                    micSentFirstChunkRef.current = true;
-                    console.log('[MicStream] Sent first audio chunk', {
-                        samples: int16.length,
-                        sampleRate: micSampleRateRef.current
-                    });
-                }
-            };
+                    if (!micSentFirstChunkRef.current) {
+                        micSentFirstChunkRef.current = true;
+                        console.log('[MicStream] Safari: Sent first audio chunk via MediaRecorder');
+                    }
+                };
 
-            source.connect(processor);
-            // connect to destination to keep processor alive in some browsers
-            processor.connect(audioContext.destination);
+                recorder.start(250); // emit chunks every 250ms
+                addMessage('System', 'Browser mic streaming enabled (Safari mode).');
+            } else {
+                // Chrome/Firefox: ScriptProcessorNode path
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                micAudioContextRef.current = audioContext;
+                micSampleRateRef.current = audioContext.sampleRate || 16000;
+                const source = audioContext.createMediaStreamSource(stream);
+                micSourceNodeRef.current = source;
 
-            addMessage('System', 'Browser mic streaming enabled.');
+                const processor = audioContext.createScriptProcessor(4096, 1, 1);
+                micProcessorRef.current = processor;
+
+                processor.onaudioprocess = (event) => {
+                    if (isMutedRef.current) return;
+                    const input = event.inputBuffer.getChannelData(0);
+                    const int16 = new Int16Array(input.length);
+                    for (let i = 0; i < input.length; i++) {
+                        const s = Math.max(-1, Math.min(1, input[i]));
+                        int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+                    }
+                    socket.emit('mic_audio_chunk', { data: int16.buffer, sample_rate: micSampleRateRef.current });
+
+                    if (!micSentFirstChunkRef.current) {
+                        micSentFirstChunkRef.current = true;
+                        console.log('[MicStream] Sent first audio chunk', {
+                            samples: int16.length,
+                            sampleRate: micSampleRateRef.current
+                        });
+                    }
+                };
+
+                source.connect(processor);
+                processor.connect(audioContext.destination);
+                addMessage('System', 'Browser mic streaming enabled.');
+            }
         } catch (err) {
             console.error('[MicStream] failed:', err);
             addMessage('System', `Mic streaming failed: ${err?.message ?? String(err)}`);
@@ -365,7 +384,9 @@ function App() {
 
     const stopBrowserMicStream = async () => {
         try {
-            if (micProcessorRef.current) {
+            if (micProcessorRef.current instanceof MediaRecorder) {
+                micProcessorRef.current.stop();
+            } else if (micProcessorRef.current) {
                 micProcessorRef.current.disconnect();
                 micProcessorRef.current.onaudioprocess = null;
             }
@@ -385,6 +406,8 @@ function App() {
 
     // Text-only fallback support (OpenAI/Ollama): use browser SpeechRecognition for voice input.
     const [openAiFallbackActive, setOpenAiFallbackActive] = useState(false);
+    const openAiFallbackActiveRef = useRef(false);
+    useEffect(() => { openAiFallbackActiveRef.current = openAiFallbackActive; }, [openAiFallbackActive]);
     const speechRecRef = useRef(null);
     const speechRecActiveRef = useRef(false);
     const speechRecRestartTimerRef = useRef(null);
@@ -510,6 +533,18 @@ function App() {
 
     // Spatial 3D positions for panels (used by SpatialWorld)
     const [spatialPositions, setSpatialPositions] = useState({ ...DEFAULT_POSITIONS });
+
+    // Panel dimensions — updated by XR two-hand pinch gesture
+    const [panelDimensions, setPanelDimensions] = useState({});
+    const handlePanelResize = useCallback((id, width, height) => {
+        setPanelDimensions(prev => ({ ...prev, [id]: { width, height } }));
+    }, []);
+
+    // Panel rotations — updated by XR two-hand twist gesture [x, y, z] euler
+    const [panelRotations, setPanelRotations] = useState({});
+    const handlePanelRotate = useCallback((id, rotation) => {
+        setPanelRotations(prev => ({ ...prev, [id]: rotation }));
+    }, []);
 
     // Legacy 2D state kept for CadWindow overlay positioning
     const [elementPositions, setElementPositions] = useState({
@@ -1964,13 +1999,17 @@ function App() {
                     audioHandlers={{
                         ensureAiAudioContext,
                         startMic: startBrowserMicStream,
+                        startSpeechRec: startBrowserSpeechRecognition,
                         isMutedRef: isMutedRef,
+                        isOpenAiFallbackRef: openAiFallbackActiveRef,
                     }}
+                    onPanelResize={handlePanelResize}
+                    onPanelRotate={handlePanelRotate}
                     panels={[
                         {
                             id: 'chat', visible: true,
                             position: spatialPositions.chat,
-                            width: 420, height: 500,
+                            width: panelDimensions.chat?.width ?? 420, height: panelDimensions.chat?.height ?? 500,
                             content: (
                                 <ChatModule
                                     messages={messages}
@@ -1990,7 +2029,7 @@ function App() {
                         {
                             id: 'tools', visible: true,
                             position: spatialPositions.tools,
-                            width: 520, height: 200,
+                            width: panelDimensions.tools?.width ?? 520, height: panelDimensions.tools?.height ?? 200,
                             content: (
                                 <ToolsModule
                                     isConnected={isConnected}
@@ -2050,7 +2089,7 @@ function App() {
                         {
                             id: 'media', visible: showMediaGallery,
                             position: spatialPositions.media,
-                            width: 520, height: 440,
+                            width: panelDimensions.media?.width ?? 520, height: panelDimensions.media?.height ?? 440,
                             content: (
                                 <MediaGalleryWindow
                                     assets={mediaAssets}
@@ -2069,7 +2108,7 @@ function App() {
                         {
                             id: 'imagePreview', visible: imagePreview.visible,
                             position: spatialPositions.imagePreview,
-                            width: 420, height: 400,
+                            width: panelDimensions.imagePreview?.width ?? 420, height: panelDimensions.imagePreview?.height ?? 400,
                             content: (
                                 <ImagePreviewWindow
                                     status={imagePreview.status}
@@ -2095,7 +2134,7 @@ function App() {
                         {
                             id: 'browser', visible: showBrowserWindow,
                             position: spatialPositions.browser,
-                            width: 550, height: 380,
+                            width: panelDimensions.browser?.width ?? 550, height: panelDimensions.browser?.height ?? 380,
                             content: (
                                 <BrowserWindow
                                     imageSrc={browserData.image}
@@ -2115,7 +2154,7 @@ function App() {
                         {
                             id: 'kasa', visible: showKasaWindow,
                             position: spatialPositions.kasa,
-                            width: 300, height: 380,
+                            width: panelDimensions.kasa?.width ?? 300, height: panelDimensions.kasa?.height ?? 380,
                             content: (
                                 <KasaWindow
                                     socket={socket}
@@ -2134,7 +2173,7 @@ function App() {
                         {
                             id: 'printer', visible: showPrinterWindow,
                             position: spatialPositions.printer,
-                            width: 380, height: 380,
+                            width: panelDimensions.printer?.width ?? 380, height: panelDimensions.printer?.height ?? 380,
                             content: (
                                 <PrinterWindow
                                     socket={socket}
@@ -2151,7 +2190,7 @@ function App() {
                         {
                             id: 'settings', visible: showSettings,
                             position: spatialPositions.settings,
-                            width: 400, height: 500,
+                            width: panelDimensions.settings?.width ?? 400, height: panelDimensions.settings?.height ?? 500,
                             content: (
                                 <SettingsWindow
                                     socket={socket}

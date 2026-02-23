@@ -6,6 +6,29 @@ import { BeautifulAvatar } from './BeautifulAvatar';
 import { FullBodyAvatar } from './FullBodyAvatar';
 
 /**
+ * AvatarErrorBoundary — Catches errors from GLB-based avatars (e.g. missing
+ * model files) and renders AvatarFallback instead of crashing the Canvas.
+ */
+class AvatarErrorBoundary extends React.Component {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error, info) {
+    console.warn('[AvatarErrorBoundary] Avatar failed to load, showing fallback:', error?.message);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback ?? null;
+    }
+    return this.props.children;
+  }
+}
+
+/**
  * AvatarSwitch - Renders the correct avatar mesh inside the unified Canvas.
  *
  * KEY ARCHITECTURE: Receives refs (not state) for audio/speaking data.
@@ -201,26 +224,30 @@ export default function AvatarSwitch({
         switch (effectiveMode) {
           case 'avatar-beautiful':
             return (
-              <Suspense fallback={<AvatarFallback />}>
-                <BeautifulAvatar
-                  isSpeaking={isSpeaking}
-                  audioData={audioData}
-                  speakingText={speakingText}
-                  scale={1}
-                />
-              </Suspense>
+              <AvatarErrorBoundary fallback={<AvatarFallback />}>
+                <Suspense fallback={<AvatarFallback />}>
+                  <BeautifulAvatar
+                    isSpeaking={isSpeaking}
+                    audioData={audioData}
+                    speakingText={speakingText}
+                    scale={1}
+                  />
+                </Suspense>
+              </AvatarErrorBoundary>
             );
 
           case 'avatar-fullbody':
             return (
-              <Suspense fallback={<AvatarFallback />}>
-                <FullBodyAvatar
-                  isSpeaking={isSpeaking}
-                  audioData={audioData}
-                  speakingText={speakingText}
-                  scale={1}
-                />
-              </Suspense>
+              <AvatarErrorBoundary fallback={<AvatarFallback />}>
+                <Suspense fallback={<AvatarFallback />}>
+                  <FullBodyAvatar
+                    isSpeaking={isSpeaking}
+                    audioData={audioData}
+                    speakingText={speakingText}
+                    scale={1}
+                  />
+                </Suspense>
+              </AvatarErrorBoundary>
             );
 
           case 'avatar-3d':
