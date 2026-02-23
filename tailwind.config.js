@@ -7,13 +7,26 @@ module.exports = {
     theme: {
         extend: {
             fontFamily: {
-                mono: ['"Share Tech Mono"', 'monospace'], // Sci-fi font
+                sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', 'Inter', 'sans-serif'],
             },
             colors: {
-                cyan: {
-                    400: '#22d3ee',
-                    500: '#06b6d4',
-                    900: '#164e63',
+                blue: {
+                    400: '#007AFF',
+                    500: '#0066CC',
+                    600: '#0051D5',
+                    900: '#001d52',
+                },
+                slate: {
+                    50: '#f8fafc',
+                    100: '#f1f5f9',
+                    200: '#e2e8f0',
+                    300: '#cbd5e1',
+                    400: '#94a3b8',
+                    500: '#64748b',
+                    600: '#475569',
+                    700: '#334155',
+                    800: '#1e293b',
+                    900: '#0f172a',
                 }
             }
         },

@@ -15,6 +15,8 @@ long_term_memory/
 projects/
 output.stl
 cad_outputs/
+.onedrive/
+external_tools/onedrive/
 
 # Node.js
 node_modules/
@@ -31,6 +33,22 @@ out/
 # IDE
 .vscode/
 .idea/
+
+# Runtime / local state
+.joda.pid
+settings.json
+logs/
+backend/mcp_servers.json.bak
+
+# Embedded repos / submodules
+external_tools/Z-Image/
+external_tools/judge0/
+external_tools/opik/
+external_tools/pinokio/
+yoda/
+
+# Large binaries
+backend/bin/*.zip
 
 # OS
 .DS_Store

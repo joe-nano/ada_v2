@@ -1,4 +1,4 @@
-# A.D.A V2 - Advanced Design Assistant
+# J.O.D.A V2 - Jarvis's Operative Developer Assistant
 
 ![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11-blue?logo=python)
 ![React](https://img.shields.io/badge/React-18.2-61DAFB?logo=react)
@@ -6,9 +6,9 @@
 ![Gemini](https://img.shields.io/badge/Google%20Gemini-Native%20Audio-4285F4?logo=google)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
-> **A.D.A** = **A**dvanced **D**esign **A**ssistant
+> **J.O.D.A** = **J**arvis's **O**perative **D**eveloper **A**ssistant
 
-ADA V2 is a sophisticated AI assistant designed for multimodal interaction. It combines Google's Gemini 2.5 Native Audio with computer vision, gesture control, and 3D CAD generation in a Electron desktop application.
+JODA V2 is a sophisticated male AI companion and developer assistant designed to manage and orchestrate all projects in the biz_automate ecosystem. He combines Google's Gemini 2.5 Native Audio with computer vision, gesture control, 3D CAD generation, and autonomous agent deployment capabilities in an Electron desktop application.
 
 ---
 
@@ -16,6 +16,8 @@ ADA V2 is a sophisticated AI assistant designed for multimodal interaction. It c
 
 | Feature | Description | Technology |
 |---------|-------------|------------|
+| **🤖 Ecosystem Orchestration** | Deploy and manage named agents across biz_automate projects | Custom Agent Framework |
+| **📊 Agent Feedback System** | Receive real-time status and performance reports from agents | WebSocket + Event Streaming |
 | **🗣️ Low-Latency Voice** | Real-time conversation with interrupt handling | Gemini 2.5 Native Audio |
 | **🧊 Parametric CAD** | Editable 3D model generation from voice prompts | `build123d` → STL |
 | **🖨️ 3D Printing** | Slicing and wireless print job submission | OrcaSlicer + Moonraker/OctoPrint |
@@ -27,7 +29,7 @@ ADA V2 is a sophisticated AI assistant designed for multimodal interaction. It c
 
 ### 🖐️ Gesture Control Details
 
-ADA's "Minority Report" interface uses your webcam to detect hand gestures:
+JODA's "Minority Report" interface uses your webcam to detect hand gestures:
 
 | Gesture | Action |
 |---------|--------|
@@ -36,6 +38,50 @@ ADA's "Minority Report" interface uses your webcam to detect hand gestures:
 | ✊ **Close Fist** | "Select" and grab a UI window to drag it |
 
 > **Tip**: Enable the video feed window to see the hand tracking overlay.
+
+---
+
+## 🤖 Agent Deployment & Ecosystem Management
+
+JODA's **primary mission** is to serve as the central orchestrator for all projects in the `biz_automate` ecosystem. He can deploy, manage, and monitor specialized agents across multiple trading bots, automation scripts, and development workflows.
+
+### Agent Deployment Capabilities
+
+**Named Agent Types**:
+- **Trading Strategy Agents** - Manage Freqtrade/Hummingbot instances, execute strategies
+- **Data Collection Agents** - Fetch market data, monitor APIs, track events
+- **Arbitrage Monitoring Agents** - Scan cross-chain opportunities in real-time
+- **Training Agents** - Retrain RL models, optimize hyperparameters
+- **System Monitoring Agents** - Track resource usage, detect anomalies, log errors
+- **Workflow Coordination Agents** - Orchestrate multi-step processes across projects
+
+### Feedback & Reporting System
+
+Each deployed agent communicates back to JODA with:
+- ✅ **Status Updates** - Running, idle, error, completed states
+- 📊 **Performance Metrics** - Profit/loss, execution time, accuracy scores
+- 🚨 **Error Logs** - Stack traces, debugging information, retry attempts
+- 🎯 **Completion Signals** - Task results, generated artifacts, final outputs
+
+### Voice Commands for Agent Management
+
+```
+"Deploy a Freqtrade monitoring agent for BTC/USDT on Binance"
+"Show me all active agents and their status"
+"Check the performance of the arbitrage agent"
+"Restart the RL training agent with new parameters"
+"Create a consolidated report from all trading agents"
+"Pause all agents and save their state"
+```
+
+### Integration with biz_automate Projects
+
+JODA orchestrates:
+- **Freqtrade** (`/root/Desktop/biz_automate/freqtrade`) - Deploy strategies, monitor trades
+- **Hummingbot** (`/root/Desktop/biz_automate/hummingbot`) - Manage connectors, coordinate market-making
+- **RL Trading Bot** (`/root/Desktop/biz_automate/reinforcement_learning_trading_bot`) - Trigger training, deploy models
+- **Arbitrage Bots** (`/root/Desktop/biz_automate/multiple_bizstreams_and_automations`) - Monitor opportunities, execute trades
+- **n8n Workflows** (`/root/Desktop/biz_automate/n8n_automations`) - Trigger automations, schedule tasks
 
 ---
 
@@ -52,7 +98,7 @@ graph TB
     
     subgraph Backend ["Backend (Python 3.11 + FastAPI)"]
         SERVER[server.py<br/>Socket.IO Server]
-        ADA[ada.py<br/>Gemini Live API]
+        JODA[joda.py<br/>Gemini Live API]
         WEB[web_agent.py<br/>Playwright Browser]
         CAD[cad_agent.py<br/>CAD + build123d]
         PRINTER[printer_agent.py<br/>3D Printing + OrcaSlicer]
@@ -60,13 +106,13 @@ graph TB
         AUTH[authenticator.py<br/>MediaPipe Face Auth]
         PM[project_manager.py<br/>Project Context]
     end
-    
+
     UI --> SOCKET_C
     SOCKET_C <--> SERVER
-    SERVER --> ADA
-    ADA --> WEB
-    ADA --> CAD
-    ADA --> KASA
+    SERVER --> JODA
+    JODA --> WEB
+    JODA --> CAD
+    JODA --> KASA
     SERVER --> AUTH
     SERVER --> PM
     SERVER --> PRINTER
@@ -83,10 +129,10 @@ graph TB
 
 ```bash
 # 1. Clone and enter
-git clone https://github.com/nazirlouis/ada_v2.git && cd ada_v2
+git clone https://github.com/nazirlouis/joda_v2.git && cd joda_v2
 
 # 2. Create Python environment (Python 3.11)
-conda create -n ada_v2 python=3.11 -y && conda activate ada_v2
+conda create -n joda_v2 python=3.11 -y && conda activate joda_v2
 brew install portaudio  # macOS only (for PyAudio)
 pip install -r requirements.txt
 playwright install chromium
@@ -98,10 +144,43 @@ npm install
 echo "GEMINI_API_KEY=your_key_here" > .env
 
 # 5. Run!
-conda activate ada_v2 && npm run dev
+conda activate joda_v2 && npm run dev
 ```
 
 </details>
+
+---
+
+## HTTPS on a VPS (recommended for mic/camera)
+
+Browsers typically require a **secure context** for microphone/camera (`navigator.mediaDevices`). For a VPS URL like `http://72.62.165.102:5173`, that means you need **HTTPS**.
+
+Important: you generally can’t get a trusted certificate for a raw IP address. Use a domain:
+- Create a DNS `A` record (e.g. `joda.yourdomain.com`) → `72.62.165.102`
+
+### Option A: Caddy (Docker) reverse proxy (recommended)
+
+From `joda_ai/` on the VPS:
+
+1) Copy deploy files and set your domain:
+- Edit `deploy/Caddyfile` and replace `joda.example.com` with your domain.
+
+2) Start Caddy:
+```bash
+cd deploy
+docker compose -f docker-compose.caddy.yml up -d
+```
+
+3) Run JODA so it binds locally (recommended):
+- Start backend on `127.0.0.1:8765`
+- Start frontend on `127.0.0.1:5173`
+
+Then open:
+- `https://joda.yourdomain.com`
+
+### Option B: Nginx (manual)
+
+If you prefer Nginx + Certbot, tell me your distro and domain and I’ll generate an exact config.
 
 ---
 
@@ -126,14 +205,14 @@ If you have never coded before, follow these steps first!
 1. Open your terminal (or Command Prompt on Windows).
 2. Type this command and hit Enter:
    ```bash
-   git clone https://github.com/nazirlouis/ada_v2.git
+   git clone https://github.com/nazirlouis/joda_v2.git
    ```
-3. This creates a folder named `ada_v2`.
+3. This creates a folder named `joda_v2`.
 
 **Step 5: Open in VS Code**
 1. Open VS Code.
 2. Go to **File > Open Folder**.
-3. Select the `ada_v2` folder you just downloaded.
+3. Select the `joda_v2` folder you just downloaded.
 4. Open the internal terminal: Press `Ctrl + ~` (tilde) or go to **Terminal > New Terminal**.
 
 ---
@@ -156,8 +235,8 @@ brew install portaudio
 Create a single Python 3.11 environment:
 
 ```bash
-conda create -n ada_v2 python=3.11
-conda activate ada_v2
+conda create -n joda_v2 python=3.11
+conda activate joda_v2
 
 # Install all dependencies
 pip install -r requirements.txt
@@ -178,11 +257,11 @@ npm install
 ```
 
 ### 4. 🔐 Face Authentication Setup
-To use the secure voice features, ADA needs to know what you look like.
+To use the secure voice features, JODA needs to know what you look like.
 
 1. Take a clear photo of your face (or use an existing one).
 2. Rename the file to `reference.jpg`.
-3. Drag and drop this file into the `ada_v2/backend` folder.
+3. Drag and drop this file into the `joda_v2/backend` folder.
 4. (Optional) You can toggle this feature on/off in `settings.json` by changing `"face_auth_enabled": true/false`.
 
 ---
@@ -202,7 +281,7 @@ The system creates a `settings.json` file on first run. You can modify this to c
 ---
 
 ### 5. 🖨️ 3D Printer Setup
-ADA V2 can slice STL files and send them directly to your 3D printer.
+JODA V2 can slice STL files and send them directly to your 3D printer.
 
 **Supported Hardware:**
 - **Klipper/Moonraker** (Creality K1, Voron, etc.)
@@ -210,26 +289,26 @@ ADA V2 can slice STL files and send them directly to your 3D printer.
 - **PrusaLink** (Experimental)
 
 **Step 1: Install Slicer**
-ADA uses **OrcaSlicer** (recommended) or PrusaSlicer to generate G-code.
+JODA uses **OrcaSlicer** (recommended) or PrusaSlicer to generate G-code.
 1. Download and install [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer).
 2. Run it once to ensure profiles are created.
-3. ADA automatically detects the installation path.
+3. JODA automatically detects the installation path.
 
 **Step 2: Connect Printer**
 1. Ensure your printer and computer are on the **same Wi-Fi network**.
-2. Open the **Printer Window** in ADA (Cube icon).
-3. ADA automatically scans for printers using mDNS.
+2. Open the **Printer Window** in JODA (Cube icon).
+3. JODA automatically scans for printers using mDNS.
 4. **Manual Connection**: If your printer isn't found, use the "Add Printer" button and enter the IP address (e.g., `192.168.1.50`).
 
 ---
 
 ### 6. 🔑 Gemini API Key Setup
-ADA uses Google's Gemini API for voice and intelligence. You need a free API key.
+JODA uses Google's Gemini API for voice and intelligence. You need a free API key.
 
 1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Sign in with your Google account.
 3. Click **"Create API Key"** and copy the generated key.
-4. Create a file named `.env` in the `ada_v2` folder (same level as `README.md`).
+4. Create a file named `.env` in the `joda_v2` folder (same level as `README.md`).
 5. Add this line to the file:
    ```
    GEMINI_API_KEY=your_api_key_here
@@ -240,14 +319,14 @@ ADA uses Google's Gemini API for voice and intelligence. You need a free API key
 
 ---
 
-## 🚀 Running ADA V2
+## 🚀 Running JODA V2
 
-You have two options to run the app. Ensure your `ada_v2` environment is active!
+You have two options to run the app. Ensure your `joda_v2` environment is active!
 
 ### Option 1: The "Easy" Way (Single Terminal)
 The app is smart enough to start the backend for you.
-1. Open your terminal in the `ada_v2` folder.
-2. Activate your environment: `conda activate ada_v2`
+1. Open your terminal in the `joda_v2` folder.
+2. Activate your environment: `conda activate joda_v2`
 3. Run:
    ```bash
    npm run dev
@@ -259,7 +338,7 @@ Use this if you want to see the Python logs (recommended for debugging).
 
 **Terminal 1 (Backend):**
 ```bash
-conda activate ada_v2
+conda activate joda_v2
 python backend/server.py
 ```
 
@@ -273,15 +352,25 @@ npm run dev
 
 ## ✅ First Flight Checklist (Things to Test)
 
-1. **Voice Check**: Say "Hello Ada". She should respond.
+1. **Voice Check**: Say "Hello Joda". He should respond.
 2. **Vision Check**: Look at the camera. If Face Auth is on, the lock screen should unlock.
 3. **CAD Check**: Open the CAD window and say "Create a cube". Watch the logs.
 4. **Web Check**: Open the Browser window and say "Go to Google".
 5. **Smart Home**: If you have Kasa devices, say "Turn on the lights".
+6. **Agent Deployment**: JODA can deploy named agents to manage biz_automate projects and receive progress reports.
 
 ---
 
 ## ▶️ Commands & Tools Reference
+
+### 🤖 Ecosystem & Agent Management
+- "Deploy a [AgentType] agent for [Task]"
+- "Show status of all running agents"
+- "Check performance of [ProjectName]"
+- "Restart the [AgentName] agent"
+- "Generate a report on [Project/Agent]"
+- "Monitor [ProjectName] for errors"
+- "Coordinate [Project1] and [Project2] workflows"
 
 ### 🗣️ Voice Commands
 - "Switch project to [Name]"
@@ -289,6 +378,46 @@ npm run dev
 - "Turn on the [Room] light"
 - "Make the light [Color]"
 - "Pause audio" / "Stop audio"
+
+### 🗓️ Scheduler (Recurring Automations)
+JODA can run recurring automation prompts (e.g., “daily trend ad refresh”) via a simple built-in scheduler.
+
+- Stored at: `$JODA_PROJECT_ROOT/.joda/scheduler/jobs.json`
+- Job types:
+  - `browse`: runs the `/browse` agent (browser task agent)
+  - `web`: runs the built-in web agent
+  - `mcp`: triggers an MCP tool call (e.g., Notion/Zapier/n8n once wired)
+  - `pipeline`: runs a built-in pipeline (currently: `daily_ads`)
+- Commands:
+  - Type `/scheduler` to list jobs
+  - Type `/schedule ...` to create/manage jobs from chat
+  - Ask JODA to create jobs using the `create_schedule` tool (Gemini tool calling)
+
+Notes:
+- For login/form automation, store credentials in Settings (memory-only) and use `{{USERNAME}}/{{PASSWORD}}` placeholders.
+- For social posting, prefer OAuth-based integrations via MCP (Zapier/Notion/etc) rather than password-based browser automation.
+
+### 📣 Daily Ads Pipeline (`pipeline: daily_ads`)
+The built-in `daily_ads` pipeline does:
+1. Pulls daily trends from public sources (Google Trends RSS, Reddit Popular, Hacker News).
+2. Builds a “Daily Ad Refresh Brief”.
+3. Sends the brief to automation via `N8N_WEBHOOK_URL` and/or `ZAPIER_WEBHOOK_URL` (your workflow can return `creatives`).
+4. If `creatives` are returned, generates image variants using NanoBanana Pro (`NANOBANANA_PRO_MODEL`) and sends them back for posting.
+
+Create a daily job from chat:
+- `/schedule cron "0 9 * * *" pipeline Daily Ads ::`
+
+### 🤖 Agent Zero (Docker)
+JODA can manage Agent Zero instances via Docker (recommended for isolation and scaling).
+
+- Image: `AGENT_ZERO_IMAGE` (default: `agent0ai/agent-zero`)
+- Default port: `AGENT_ZERO_BASE_PORT` (default: `50001`) mapped to container port `80`
+- Start (manual):
+  - `docker pull agent0ai/agent-zero`
+  - `docker run -p 50001:80 agent0ai/agent-zero`
+- In JODA (requires `/expert on` + confirmation):
+  - Use `agent_zero_pull`, `agent_zero_start`, `agent_zero_list`, `agent_zero_stop`, `agent_zero_scale`
+  - Or type `/agent0` to see shortcuts
 
 ### 🧊 3D CAD
 - **Prompt**: "Create a 3D model of a hex bolt."
@@ -299,10 +428,16 @@ npm run dev
 - **Prompt**: "Go to Amazon and find a USB-C cable under $10."
 - **Note**: The agent will auto-scroll, click, and type. Do not interfere with the browser window while it runs.
 
+### 🌐 Browser Task Agent (`/browse`)
+- **Prompt**: "Open docs.browser-use.com and summarize the quickstart."
+- **Note**: `/browse` uses a wrapper that can integrate with `browser-use` (https://docs.browser-use.com/quickstart). If `browser_use` is not installed/configured, it falls back to the built-in Playwright web agent.
+- **Config**: `BROWSER_USE_PROVIDER=openai` + `BROWSER_USE_OPENAI_MODEL=gpt-o3` (optional; see `.env.example`).
+- **Skills**: JODA supports local reusable `/browse` “skills” (prompt templates) inspired by browser-use Skills. Use `save_browser_skill`/`list_browser_skills` tools (or type `/skills`) to manage them; matching skills are auto-injected into `/browse` runs.
+
 ### 🖨️ Printing & Slicing
-- **Auto-Discovery**: ADA automatically finds printers on your network.
+- **Auto-Discovery**: JODA automatically finds printers on your network.
 - **Slicing**: Click "Slice & Print" on any generated 3D model.
-- **Profiles**: ADA intelligently selects the correct OrcaSlicer profile based on your printer's name (e.g., "Creality K1").
+- **Profiles**: JODA intelligently selects the correct OrcaSlicer profile based on your printer's name (e.g., "Creality K1").
 
 ---
 
@@ -322,9 +457,17 @@ npm run dev
 **Symptoms**: Backend crashes on startup with "API key not found".
 
 **Solution**:
-1. Make sure your `.env` file is in the root `ada_v2` folder (not inside `backend/`).
+1. Make sure your `.env` file is in the root `joda_v2` folder (not inside `backend/`).
 2. Verify the format is exactly: `GEMINI_API_KEY=your_key` (no quotes, no spaces).
 3. Restart the backend after editing the file.
+
+---
+
+### Fallback Model Order (When Gemini Is Unavailable)
+
+JODA falls back in this order:
+1. **OpenAI** (`OPENAI_API_KEY`) using `OPENAI_MODEL` (default: `gpt-5`)
+2. **Local Ollama** (`OLLAMA_BASE_URL` + `OLLAMA_MODELS`)
 
 ---
 
@@ -332,7 +475,7 @@ npm run dev
 **Symptoms**: `websockets.exceptions.ConnectionClosedError: 1011 (internal error)`.
 
 **Solution**:
-This is a server-side issue from the Gemini API. Simply reconnect by clicking the connect button or saying "Hello Ada" again. If it persists, check your internet connection or try again later.
+This is a server-side issue from the Gemini API. Simply reconnect by clicking the connect button or saying "Hello Joda" again. If it persists, check your internet connection or try again later.
 
 ---
 
@@ -345,9 +488,9 @@ This is a server-side issue from the Gemini API. Simply reconnect by clicking th
 ## 📂 Project Structure
 
 ```
-ada_v2/
+joda_v2/
 ├── backend/                    # Python server & AI logic
-│   ├── ada.py                  # Gemini Live API integration
+│   ├── joda.py                 # Gemini Live API integration
 │   ├── server.py               # FastAPI + Socket.IO server
 │   ├── cad_agent.py            # CAD generation orchestrator
 │   ├── printer_agent.py        # 3D printer discovery & slicing

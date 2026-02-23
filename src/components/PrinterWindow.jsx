@@ -1,23 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { X, RefreshCw, Printer, Thermometer, Clock, FileText, CheckCircle, AlertTriangle, ExternalLink } from 'lucide-react';
+import { X, RefreshCw, Printer, Thermometer, Clock, FileText, ExternalLink } from 'lucide-react';
 
-const { shell } = window.require('electron');
+let shell = null;
+try {
+    if (typeof window !== 'undefined' && window.require) {
+        shell = window.require('electron').shell;
+    }
+} catch {
+    shell = null;
+}
+
+const openExternal = (url) => {
+    if (shell && typeof shell.openExternal === 'function') {
+        shell.openExternal(url);
+        return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+};
 
 const PrinterWindow = ({
     socket,
-    position,
     onClose,
-    activeDragElement,
-    setActiveDragElement,
-    onMouseDown,
-    zIndex = 40
 }) => {
     const [isDiscovering, setIsDiscovering] = useState(false);
-    const [printers, setPrinters] = useState([]); // [{ name, host, port, printer_type, status: {...}, camera_url: ... }]
-    const [selectedPrinter, setSelectedPrinter] = useState(null);
+    const [printers, setPrinters] = useState([]);
     const [slicingProgress, setSlicingProgress] = useState({ percent: 0, message: '', active: false });
 
-    // Initial discovery on mount
     useEffect(() => {
         if (socket) {
             handleDiscover();
@@ -28,7 +36,6 @@ const PrinterWindow = ({
             });
 
             socket.on('print_status_update', (data) => {
-                // Update specific printer status in list
                 setPrinters(prev => prev.map(p =>
                     p.name === data.printer ? { ...p, status: data } : p
                 ));
@@ -43,7 +50,6 @@ const PrinterWindow = ({
             });
 
             socket.on('print_result', (result) => {
-                // Reset slicing when print starts or fails
                 if (result.success) {
                     setSlicingProgress({ percent: 100, message: 'Done', active: false });
                 } else {
@@ -64,50 +70,37 @@ const PrinterWindow = ({
     const handleDiscover = () => {
         setIsDiscovering(true);
         socket.emit('discover_printers');
-        // Fallback timeout
         setTimeout(() => setIsDiscovering(false), 5000);
     };
 
     const getStatusColor = (state) => {
-        if (!state) return 'text-gray-400';
+        if (!state) return 'text-gray-500';
         const s = state.toLowerCase();
         if (s.includes('print')) return 'text-green-400';
         if (s.includes('paus')) return 'text-yellow-400';
         if (s.includes('error') || s.includes('fail')) return 'text-red-400';
-        return 'text-cyan-400';
+        return 'text-blue-400';
     };
 
     return (
-        <div
-            id="printer"
-            onMouseDown={onMouseDown}
-            style={{
-                position: 'absolute',
-                left: position.x,
-                top: position.y,
-                transform: 'translate(-50%, -50%)',
-                width: '380px',
-                zIndex: zIndex
-            }}
-            className="pointer-events-auto backdrop-blur-xl bg-black/80 border border-green-500/30 rounded-2xl shadow-[0_0_30px_rgba(74,222,128,0.1)] overflow-hidden flex flex-col"
-        >
+        <div className="w-full h-full flex flex-col">
             {/* Header */}
-            <div data-drag-handle className="flex items-center justify-between p-4 border-b border-white/10 bg-white/5 cursor-grab active:cursor-grabbing">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
                 <div className="flex items-center gap-2">
                     <Printer size={16} className="text-green-400" />
-                    <span className="text-xs font-bold tracking-widest text-green-100 uppercase">3D Printers</span>
+                    <span className="text-xs font-bold tracking-widest uppercase">3D Printers</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <button
                         onClick={handleDiscover}
                         disabled={isDiscovering}
-                        className={`p-1.5 hover:bg-white/10 rounded-full transition-colors ${isDiscovering ? 'animate-spin text-green-400' : 'text-gray-400 hover:text-green-400'}`}
+                        className={`p-1.5 hover:bg-white/10 rounded-full transition-colors ${isDiscovering ? 'animate-spin text-green-400' : 'text-gray-500 hover:text-green-400'}`}
                     >
                         <RefreshCw size={14} />
                     </button>
                     <button
                         onClick={onClose}
-                        className="p-1.5 hover:bg-white/10 rounded-full text-gray-400 hover:text-white transition-colors"
+                        className="p-1.5 hover:bg-white/10 rounded-full text-gray-500 hover:text-white transition-colors"
                     >
                         <X size={14} />
                     </button>
@@ -115,23 +108,23 @@ const PrinterWindow = ({
             </div>
 
             {/* Content */}
-            <div className="p-4 max-h-[400px] overflow-y-auto custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-3 scrollbar-hide">
                 {/* Manual Add Section */}
-                <div className="mb-4 p-3 bg-white/5 border border-white/10 rounded-lg">
-                    <div className="text-[10px] uppercase text-white/40 font-bold mb-2 tracking-wider">Manual Add</div>
+                <div className="mb-4 p-3 bg-white/5 rounded-lg border border-white/5">
+                    <div className="text-[10px] uppercase text-gray-500 font-bold mb-2 tracking-wider">Manual Add</div>
                     <div className="flex flex-col gap-2">
                         <input
                             id="printer-name-input"
                             type="text"
                             placeholder="Printer Name (e.g. Creality K1)"
-                            className="w-full bg-black/50 border border-white/10 rounded px-2 py-1 text-xs text-green-100 focus:border-green-500/50 outline-none placeholder:text-white/20"
+                            className="w-full rounded px-2 py-1 text-xs outline-none"
                         />
                         <div className="flex gap-2">
                             <input
                                 id="printer-ip-input"
                                 type="text"
                                 placeholder="IP Address (e.g. 192.168.1.50)"
-                                className="flex-1 bg-black/50 border border-white/10 rounded px-2 py-1 text-xs text-green-100 focus:border-green-500/50 outline-none placeholder:text-white/20"
+                                className="flex-1 rounded px-2 py-1 text-xs outline-none"
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         const ip = e.target.value.trim();
@@ -147,7 +140,7 @@ const PrinterWindow = ({
                                 }}
                             />
                             <button
-                                className="bg-green-500/20 hover:bg-green-500/30 text-green-400 text-xs px-3 rounded transition-colors"
+                                className="bg-green-500/15 hover:bg-green-500/25 text-green-400 text-xs px-3 rounded transition-colors"
                                 onClick={() => {
                                     const ipInput = document.getElementById('printer-ip-input');
                                     const nameInput = document.getElementById('printer-name-input');
@@ -168,7 +161,7 @@ const PrinterWindow = ({
                 </div>
 
                 {printers.length === 0 ? (
-                    <div className="text-center py-8 text-white/30 text-xs">
+                    <div className="text-center py-8 text-gray-500 text-xs">
                         {isDiscovering ? (
                             <div className="flex flex-col items-center gap-2">
                                 <RefreshCw className="animate-spin" size={20} />
@@ -180,22 +173,21 @@ const PrinterWindow = ({
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        {/* Global Pipeline Visualizer (when slicing is active) */}
+                        {/* Slicing Pipeline */}
                         {slicingProgress.active && (
-                            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                                <div className="text-[10px] uppercase text-blue-300 font-bold mb-2 tracking-wider flex justify-between">
+                            <div className="mb-4 p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                                <div className="text-[10px] uppercase text-blue-400 font-bold mb-2 tracking-wider flex justify-between">
                                     <span>Preparation Pipeline</span>
                                     <span>{slicingProgress.percent}%</span>
                                 </div>
-                                {/* Pipeline Stages */}
-                                <div className="flex items-center gap-2 mb-2 text-[10px] text-white/40">
+                                <div className="flex items-center gap-2 mb-2 text-[10px] text-gray-500">
                                     <div className={`flex items-center gap-1 ${slicingProgress.percent < 100 ? 'text-green-400 font-bold' : ''}`}>
-                                        <div className={`w-2 h-2 rounded-full ${slicingProgress.percent < 100 ? 'bg-green-500 animate-pulse' : 'bg-white/20'}`}></div>
+                                        <div className={`w-2 h-2 rounded-full ${slicingProgress.percent < 100 ? 'bg-green-500 animate-pulse' : 'bg-gray-600'}`} />
                                         Slicing
                                     </div>
-                                    <div className="h-[1px] w-4 bg-white/10"></div>
+                                    <div className="h-[1px] w-4 bg-gray-600" />
                                     <div className="flex items-center gap-1">
-                                        <div className="w-2 h-2 rounded-full bg-white/20"></div>
+                                        <div className="w-2 h-2 rounded-full bg-gray-600" />
                                         Printing
                                     </div>
                                 </div>
@@ -205,24 +197,23 @@ const PrinterWindow = ({
                                         style={{ width: `${slicingProgress.percent}%` }}
                                     />
                                 </div>
-                                <div className="text-[10px] text-blue-200/60 mt-1 truncate">
+                                <div className="text-[10px] text-blue-300 mt-1 truncate">
                                     {slicingProgress.message}
                                 </div>
                             </div>
                         )}
 
                         {printers.map((printer, idx) => (
-                            <div key={idx} className="bg-white/5 border border-white/10 rounded-lg p-3 hover:border-green-500/30 transition-all">
+                            <div key={idx} className="bg-white/5 rounded-lg p-3 hover:bg-white/8 transition-all border border-white/5">
                                 <div className="flex justify-between items-start mb-2">
                                     <div>
-                                        <div className="font-bold text-sm text-green-50">{printer.name}</div>
-                                        <div className="text-[10px] text-white/40 uppercase tracking-wider">{printer.host}:{printer.port} • {printer.printer_type}</div>
+                                        <div className="font-bold text-sm">{printer.name}</div>
+                                        <div className="text-[10px] text-gray-500 uppercase tracking-wider">{printer.host}:{printer.port} • {printer.printer_type}</div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        {/* Open Interface Button */}
                                         <button
-                                            onClick={() => shell.openExternal(`http://${printer.host}`)}
-                                            className="flex items-center gap-1 text-[10px] text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 px-2 py-0.5 rounded transition-colors"
+                                            onClick={() => openExternal(`http://${printer.host}`)}
+                                            className="flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/15 px-2 py-0.5 rounded transition-colors"
                                             title="Open printer web interface"
                                         >
                                             <ExternalLink size={10} />
@@ -238,25 +229,24 @@ const PrinterWindow = ({
 
                                 {/* Camera Feed */}
                                 {printer.camera_url && (
-                                    <div className="mb-3 rounded overflow-hidden border border-white/10 bg-black relative aspect-video">
+                                    <div className="mb-3 rounded overflow-hidden border border-white/10 bg-black/30 relative aspect-video">
                                         <img
                                             src={printer.camera_url}
                                             alt="Printer Camera"
                                             className="w-full h-full object-cover"
                                             onError={(e) => {
                                                 e.target.style.display = 'none';
-                                                e.target.nextSibling.style.display = 'flex';
+                                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
                                             }}
                                         />
-                                        <div className="hidden absolute inset-0 flex items-center justify-center text-white/20 text-xs">
+                                        <div className="hidden absolute inset-0 flex items-center justify-center text-gray-500 text-xs">
                                             Camera Stream Unavailable
                                         </div>
                                     </div>
                                 )}
 
                                 {printer.status && (
-                                    <div className="space-y-2 mt-3 pt-3 border-t border-white/5">
-                                        {/* Progress Bar */}
+                                    <div className="space-y-2 mt-3 pt-3 border-t border-white/10">
                                         {printer.status.progress_percent > 0 && (
                                             <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden">
                                                 <div
@@ -265,9 +255,7 @@ const PrinterWindow = ({
                                                 />
                                             </div>
                                         )}
-
-                                        {/* Stats Grid */}
-                                        <div className="grid grid-cols-2 gap-2 text-[10px] text-white/60">
+                                        <div className="grid grid-cols-2 gap-2 text-[10px] text-gray-400">
                                             {printer.status.filename && (
                                                 <div className="col-span-2 flex items-center gap-1.5 truncate">
                                                     <FileText size={10} className="text-green-400" />

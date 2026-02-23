@@ -1,17 +1,20 @@
-import React from 'react';
-import { Mic, MicOff, Settings, Power, Video, VideoOff, Hand, Lightbulb, Printer, Globe, Box } from 'lucide-react';
+import React, { useState } from 'react';
+import { Mic, MicOff, Settings, Power, Video, VideoOff, Hand, Lightbulb, Printer, Globe, Box, Volume2, VolumeX, Image } from 'lucide-react';
 
 const ToolsModule = ({
     isConnected,
     isMuted,
     isVideoOn,
+    isSpeakerMuted,
+    speakerVolume,
     isHandTrackingEnabled,
     showSettings,
     onTogglePower,
     onToggleMute,
+    onToggleSpeaker,
+    onSetSpeakerVolume,
     onToggleVideo,
     onToggleSettings,
-
     onToggleHand,
     onToggleKasa,
     showKasaWindow,
@@ -21,125 +24,140 @@ const ToolsModule = ({
     showCadWindow,
     onToggleBrowser,
     showBrowserWindow,
-    activeDragElement,
-
-    position,
-    onMouseDown
+    onToggleMedia,
+    showMediaGallery,
+    isHudAwake = true,
 }) => {
+    const [showVolume, setShowVolume] = useState(false);
+
     return (
         <div
-            id="tools"
-            onMouseDown={onMouseDown}
-            className={`absolute px-6 py-3 transition-all duration-200 
-                        backdrop-blur-xl bg-black/40 border border-white/10 shadow-2xl rounded-full`}
+            className="px-4 py-3 transition-all duration-500"
             style={{
-                left: position.x,
-                top: position.y,
-                transform: 'translate(-50%, -50%)',
-                pointerEvents: 'auto'
+                pointerEvents: 'auto',
+                opacity: isHudAwake ? 1 : 0.6,
             }}
         >
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay rounded-full"></div>
-
-            <div className="flex justify-center gap-6 relative z-10">
+            <div className="flex justify-center gap-3 flex-wrap">
                 {/* Power Button */}
                 <button
                     onClick={onTogglePower}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${isConnected
-                        ? 'border-green-500 bg-green-500/10 text-green-500 hover:bg-green-500/20 shadow-[0_0_15px_rgba(34,197,94,0.3)]'
-                        : 'border-gray-600 bg-gray-600/10 text-gray-500 hover:bg-gray-600/20'
-                        } `}
+                    className={`apple-button sf-icon ${isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-black/5 border-black/8'}`}
+                    title={isConnected ? 'Disconnect' : 'Connect'}
                 >
-                    <Power size={24} />
+                    <Power size={18} className={isConnected ? 'text-green-600' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
                 {/* Mute Button */}
                 <button
                     onClick={onToggleMute}
                     disabled={!isConnected}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${!isConnected
-                        ? 'border-gray-800 text-gray-800 cursor-not-allowed'
-                        : isMuted
-                            ? 'border-red-500 bg-red-500/10 text-red-500 hover:bg-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                            : 'border-cyan-500 bg-cyan-500/10 text-cyan-500 hover:bg-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
-                        } `}
+                    className={`apple-button sf-icon ${!isConnected ? 'opacity-30 cursor-not-allowed' : isMuted ? 'bg-red-500/10 border-red-400/20' : 'bg-blue-500/10 border-blue-400/15'}`}
+                    title={isMuted ? 'Unmute' : 'Mute'}
                 >
-                    {isMuted ? <MicOff size={24} /> : <Mic size={24} />}
+                    {isMuted ? <MicOff size={18} className="text-red-500" strokeWidth={2} /> : <Mic size={18} className="text-blue-500" strokeWidth={2} />}
                 </button>
 
-                {/* Video Button */}
+                {/* Speaker Button with Volume Control */}
+                <div className="relative">
+                    <button
+                        onClick={onToggleSpeaker}
+                        onMouseEnter={() => setShowVolume(true)}
+                        className={`apple-button sf-icon ${isSpeakerMuted ? 'bg-gray-500/10 border-gray-400/15' : 'bg-green-500/10 border-green-400/15'}`}
+                        title="Toggle AI speech playback"
+                    >
+                        {isSpeakerMuted ? <VolumeX size={18} className="text-gray-500" strokeWidth={2} /> : <Volume2 size={18} className="text-green-600" strokeWidth={2} />}
+                    </button>
+                    {showVolume && (
+                        <div
+                            className="absolute left-1/2 -translate-x-1/2 bottom-[60px] px-3 py-2 rounded-xl"
+                            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(10px)' }}
+                            onMouseLeave={() => setShowVolume(false)}
+                        >
+                            <div className="flex flex-col items-center gap-1">
+                                <span className="text-[9px] text-gray-400 font-medium tracking-wider">VOL</span>
+                                <input
+                                    type="range" min={0} max={1} step={0.01}
+                                    value={Number.isFinite(speakerVolume) ? speakerVolume : 0.85}
+                                    onChange={(e) => onSetSpeakerVolume?.(Number(e.target.value))}
+                                    className="w-20 h-1.5 accent-blue-500 cursor-pointer rounded-full"
+                                />
+                                <span className="text-[10px] text-gray-500 font-medium">{Math.round((Number.isFinite(speakerVolume) ? speakerVolume : 0.85) * 100)}%</span>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Video */}
                 <button
                     onClick={onToggleVideo}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${isVideoOn
-                        ? 'border-purple-500 bg-purple-500/10 text-purple-500 hover:bg-purple-500/20 shadow-[0_0_15px_rgba(168,85,247,0.3)]'
-                        : 'border-cyan-900 text-cyan-700 hover:border-cyan-500 hover:text-cyan-500'
-                        } `}
+                    className={`apple-button sf-icon ${isVideoOn ? 'bg-purple-500/10 border-purple-400/15' : 'bg-black/5 border-black/8'}`}
+                    title={isVideoOn ? 'Stop Camera' : 'Start Camera'}
                 >
-                    {isVideoOn ? <Video size={24} /> : <VideoOff size={24} />}
+                    {isVideoOn ? <Video size={18} className="text-purple-600" strokeWidth={2} /> : <VideoOff size={18} className="text-gray-500" strokeWidth={2} />}
                 </button>
 
-                {/* Settings Button */}
+                {/* Settings */}
                 <button
                     onClick={onToggleSettings}
-                    className={`p-3 rounded-full border-2 transition-all ${showSettings ? 'border-cyan-400 text-cyan-400 bg-cyan-900/20' : 'border-cyan-900 text-cyan-700 hover:border-cyan-500 hover:text-cyan-500'
-                        } `}
+                    className={`apple-button sf-icon ${showSettings ? 'bg-blue-500/10 border-blue-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="Settings"
                 >
-                    <Settings size={24} />
+                    <Settings size={18} className={showSettings ? 'text-blue-500' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
-                {/* Hand Tracking Toggle */}
+                {/* Hand Tracking */}
                 <button
                     onClick={onToggleHand}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${isHandTrackingEnabled
-                        ? 'border-orange-500 bg-orange-500/10 text-orange-500 hover:bg-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.3)]'
-                        : 'border-cyan-900 text-cyan-700 hover:border-cyan-500 hover:text-cyan-500'
-                        } `}
+                    className={`apple-button sf-icon ${isHandTrackingEnabled ? 'bg-orange-500/10 border-orange-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="Hand Tracking"
                 >
-                    <Hand size={24} />
+                    <Hand size={18} className={isHandTrackingEnabled ? 'text-orange-500' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
-                {/* Kasa Light Control */}
+                {/* Kasa */}
                 <button
                     onClick={onToggleKasa}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${showKasaWindow
-                        ? 'border-yellow-300 bg-yellow-300/10 text-yellow-300 hover:bg-yellow-300/20 shadow-[0_0_15px_rgba(253,224,71,0.3)]'
-                        : 'border-cyan-900 text-cyan-700 hover:border-cyan-500 hover:text-cyan-500'
-                        } `}
+                    className={`apple-button sf-icon ${showKasaWindow ? 'bg-yellow-500/10 border-yellow-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="Smart Lights"
                 >
-                    <Lightbulb size={24} />
+                    <Lightbulb size={18} className={showKasaWindow ? 'text-yellow-600' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
-                {/* 3D Printer Control */}
+                {/* Printer */}
                 <button
                     onClick={onTogglePrinter}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${showPrinterWindow
-                        ? 'border-green-400 bg-green-400/10 text-green-400 hover:bg-green-400/20'
-                        : 'border-cyan-900 text-cyan-700 hover:border-green-500 hover:text-green-500'
-                        } `}
+                    className={`apple-button sf-icon ${showPrinterWindow ? 'bg-green-500/10 border-green-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="3D Printer"
                 >
-                    <Printer size={24} />
+                    <Printer size={18} className={showPrinterWindow ? 'text-green-600' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
-                {/* CAD Agent Toggle */}
+                {/* CAD */}
                 <button
                     onClick={onToggleCad}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${showCadWindow
-                        ? 'border-cyan-400 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20 shadow-[0_0_15px_rgba(34,211,238,0.3)]'
-                        : 'border-cyan-900 text-cyan-700 hover:border-cyan-500 hover:text-cyan-500'
-                        } `}
+                    className={`apple-button sf-icon ${showCadWindow ? 'bg-blue-500/10 border-blue-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="CAD Agent"
                 >
-                    <Box size={24} />
+                    <Box size={18} className={showCadWindow ? 'text-blue-500' : 'text-gray-500'} strokeWidth={2} />
                 </button>
 
-                {/* Web Agent Toggle */}
+                {/* Browser */}
                 <button
                     onClick={onToggleBrowser}
-                    className={`p-3 rounded-full border-2 transition-all duration-300 ${showBrowserWindow
-                        ? 'border-blue-400 bg-blue-400/10 text-blue-400 hover:bg-blue-400/20 shadow-[0_0_15px_rgba(96,165,250,0.3)]'
-                        : 'border-cyan-900 text-cyan-700 hover:border-blue-500 hover:text-blue-500'
-                        } `}
+                    className={`apple-button sf-icon ${showBrowserWindow ? 'bg-blue-500/10 border-blue-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="Web Browser"
                 >
-                    <Globe size={24} />
+                    <Globe size={18} className={showBrowserWindow ? 'text-blue-500' : 'text-gray-500'} strokeWidth={2} />
+                </button>
+
+                {/* Media */}
+                <button
+                    onClick={onToggleMedia}
+                    className={`apple-button sf-icon ${showMediaGallery ? 'bg-amber-500/10 border-amber-400/15' : 'bg-black/5 border-black/8'}`}
+                    title="Media Gallery"
+                >
+                    <Image size={18} className={showMediaGallery ? 'text-amber-500' : 'text-gray-500'} strokeWidth={2} />
                 </button>
             </div>
         </div>

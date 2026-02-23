@@ -1,0 +1,207 @@
+/* ============================================
+   JODA Glassmorphic UI - Apple Vision Pro Light
+   ============================================ */
+
+/* Glass Material System */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.6);
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.08);
+  --glass-blur: 24px;
+
+  --apple-blue: #007AFF;
+  --apple-green: #34C759;
+  --apple-red: #FF3B30;
+  --apple-yellow: #FFCC00;
+  --apple-purple: #AF52DE;
+
+  --spatial-depth: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* Glass Container */
+.glass {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.7),
+    rgba(255, 255, 255, 0.5)
+  );
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* Apple-style Buttons */
+.apple-button {
+  background: rgba(0, 0, 0, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 50%;
+  padding: 12px;
+  transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.apple-button:hover {
+  background: rgba(0, 0, 0, 0.08);
+  transform: scale(1.05);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.apple-button:active {
+  transform: scale(0.95);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+/* Floating Avatar Container */
+.avatar-float {
+  position: fixed !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1) !important;
+  cursor: move;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+  border-radius: 24px;
+}
+
+.avatar-float:hover {
+  box-shadow: 0 25px 80px rgba(0, 122, 255, 0.1) !important;
+}
+
+/* Vision Pro Spatial Effect */
+.spatial-card {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.72),
+    rgba(255, 255, 255, 0.55)
+  );
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 24px;
+  box-shadow:
+    var(--spatial-depth),
+    inset 0 1px 1px rgba(255, 255, 255, 0.8);
+}
+
+/* Frosted Glass Top Bar */
+.glass-topbar {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* Minimize Window Controls - Apple Style */
+.window-control {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: none;
+  transition: all 0.15s ease;
+  opacity: 0.8;
+}
+
+.window-control:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.window-control.red {
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF3B30 100%);
+}
+
+.window-control.yellow {
+  background: linear-gradient(135deg, #FFD93D 0%, #FFCC00 100%);
+}
+
+.window-control.green {
+  background: linear-gradient(135deg, #6BCF7F 0%, #34C759 100%);
+}
+
+/* Smooth Dragging */
+.dragging {
+  cursor: grabbing !important;
+  opacity: 0.9;
+  transition: opacity 0.1s ease;
+}
+
+/* Apple SF Symbols Style Icons */
+.sf-icon {
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.06));
+  transition: all 0.2s ease;
+}
+
+.sf-icon:hover {
+  filter: drop-shadow(0 2px 4px rgba(0, 122, 255, 0.15));
+}
+
+/* Spatial Depth Layers */
+.depth-1 { z-index: 100; }
+.depth-2 { z-index: 200; }
+.depth-3 { z-index: 300; }
+.depth-4 { z-index: 400; }
+.depth-5 { z-index: 500; }
+
+/* Vision Pro Background - Light */
+.visionpro-bg {
+  background: radial-gradient(
+    ellipse at center,
+    rgba(245, 245, 247, 1) 0%,
+    rgba(232, 232, 237, 1) 50%,
+    rgba(209, 209, 214, 1) 100%
+  );
+}
+
+/* Glass Shine Effect */
+.glass-shine::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.4) 0%,
+    transparent 100%
+  );
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Floating Action Button - Apple Style */
+.fab-apple {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #007AFF 0%, #0051D5 100%);
+  box-shadow:
+    0 8px 24px rgba(0, 122, 255, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.fab-apple:hover {
+  transform: scale(1.1);
+  box-shadow:
+    0 12px 32px rgba(0, 122, 255, 0.35),
+    0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.fab-apple:active {
+  transform: scale(0.95);
+}
+
+/* Smooth Transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+}

@@ -1,13 +1,71 @@
-@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+* {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', sans-serif;
+}
+
 body {
   margin: 0;
-  background-color: #000;
-  overflow: hidden;
+  background: radial-gradient(ellipse at center, #f5f5f7 0%, #e8e8ed 50%, #d1d1d6 100%);
+  background-attachment: fixed;
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #1d1d1f;
+}
+
+/* HUD "alive" effects (wake on speech) */
+.joda-hud {
+  transition: filter 700ms ease, opacity 700ms ease;
+}
+
+.joda-hud.hud-idle {
+  filter: saturate(0.95) brightness(1) contrast(1);
+}
+
+.joda-hud.hud-awake {
+  filter: saturate(1.05) brightness(1.02) contrast(1.02);
+}
+
+@keyframes hudFloat {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes hudPulse {
+  0% {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 0 0 rgba(0, 122, 255, 0);
+  }
+  50% {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 0 18px rgba(0, 122, 255, 0.12);
+  }
+  100% {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 0 0 rgba(0, 122, 255, 0);
+  }
+}
+
+.joda-hud.hud-awake .hud-bubble {
+  animation: hudFloat 2.8s ease-in-out infinite, hudPulse 1.6s ease-in-out infinite;
+  will-change: transform, box-shadow;
+}
+
+.joda-hud.hud-idle .hud-bubble {
+  opacity: 0.85;
+  transition: opacity 700ms ease;
+}
+
+.joda-hud.hud-awake .hud-panel {
+  animation: hudPulse 1.6s ease-in-out infinite;
 }
 
 /* Custom Scrollbar Hide */
@@ -30,4 +88,124 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* ===== Spatial 3D World ===== */
+
+.spatial-world-container {
+  position: absolute;
+  inset: 0;
+  top: 52px;
+}
+
+.spatial-panel {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  color: #e0e0e0;
+  display: flex;
+  flex-direction: column;
+}
+
+.spatial-panel-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.spatial-panel-content::-webkit-scrollbar {
+  width: 4px;
+}
+.spatial-panel-content::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+.panel-handle {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  cursor: grab;
+  user-select: none;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.panel-handle:active {
+  cursor: grabbing;
+}
+
+.panel-handle-grip {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.25);
+  flex-shrink: 0;
+}
+
+.panel-handle-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.35);
+  margin-left: auto;
+}
+
+.panel-pin-btn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background 150ms, transform 150ms;
+}
+.panel-pin-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(1.1);
+}
+.panel-pin-btn.pinned {
+  background: rgba(59, 130, 246, 0.2);
+}
+
+/* Spatial-themed overrides for chat/tools inside 3D panels */
+.spatial-panel .text-gray-800 { color: #e0e0e0; }
+.spatial-panel .text-gray-700 { color: #d0d0d0; }
+.spatial-panel .text-gray-500 { color: #999; }
+.spatial-panel .text-gray-400 { color: #888; }
+.spatial-panel .bg-white\/40 { background: rgba(255, 255, 255, 0.06); }
+.spatial-panel .bg-white\/60 { background: rgba(255, 255, 255, 0.08); }
+.spatial-panel .bg-blue-500\/10 { background: rgba(59, 130, 246, 0.15); }
+.spatial-panel .border-black\/5 { border-color: rgba(255, 255, 255, 0.1); }
+.spatial-panel input {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  color: #e0e0e0 !important;
+}
+.spatial-panel input::placeholder {
+  color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* Avatar billboard animations */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
 }

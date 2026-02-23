@@ -1,0 +1,242 @@
+{
+  "servers": {
+    "filesystem": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/root/Desktop/biz_automate"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "brave-search": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-brave-search"
+      ],
+      "env": {
+        "BRAVE_API_KEY": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "github": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "puppeteer": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-puppeteer"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "postgres": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-postgres"
+      ],
+      "env": {
+        "POSTGRES_CONNECTION_STRING": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "sqlite": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-sqlite"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "slack": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-slack"
+      ],
+      "env": {
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_TEAM_ID": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "fetch": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-fetch"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "pubmed": {
+      "command": [
+        "npx",
+        "-y",
+        "@cyanheads/pubmed-mcp-server"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "custom-trading-tools": {
+      "command": [
+        "python3",
+        "-m",
+        "trading_mcp_server"
+      ],
+      "transport": "stdio",
+      "enabled": true
+    },
+    "notion": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-notion"
+      ],
+      "env": {
+        "NOTION_API_TOKEN": "",
+        "NOTION_DATABASE_ID": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "zapier": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-zapier"
+      ],
+      "env": {
+        "ZAPIER_API_KEY": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    },
+    "google-calendar": {
+      "command": [
+        "npx",
+        "-y",
+        "@modelcontextprotocol/server-google-calendar"
+      ],
+      "env": {
+        "GOOGLE_CLIENT_ID": "",
+        "GOOGLE_CLIENT_SECRET": "",
+        "GOOGLE_REFRESH_TOKEN": "",
+        "GOOGLE_CALENDAR_ID": ""
+      },
+      "transport": "stdio",
+      "enabled": false
+    }
+  },
+  "agent_tool_permissions": {
+    "freqtrade": {
+      "allowed_tools": [
+        "filesystem.read_file",
+        "filesystem.write_file",
+        "filesystem.list_directory",
+        "fetch.get",
+        "fetch.post",
+        "custom-trading-tools.backtest",
+        "custom-trading-tools.get_market_data",
+        "puppeteer.screenshot",
+        "sqlite.query"
+      ],
+      "denied_tools": [
+        "filesystem.delete_file"
+      ]
+    },
+    "hummingbot": {
+      "allowed_tools": [
+        "filesystem.read_file",
+        "filesystem.write_file",
+        "fetch.get",
+        "fetch.post",
+        "custom-trading-tools.get_market_data",
+        "postgres.query",
+        "sqlite.query",
+        "slack.post_message"
+      ]
+    },
+    "rl_trading": {
+      "allowed_tools": [
+        "filesystem.read_file",
+        "filesystem.write_file",
+        "filesystem.create_directory",
+        "fetch.get",
+        "custom-trading-tools.backtest",
+        "custom-trading-tools.train_model",
+        "puppeteer.screenshot",
+        "sqlite.query"
+      ]
+    },
+    "arbitrage": {
+      "allowed_tools": [
+        "filesystem.read_file",
+        "fetch.get",
+        "fetch.post",
+        "custom-trading-tools.get_market_data",
+        "custom-trading-tools.calculate_arbitrage",
+        "puppeteer.navigate",
+        "slack.post_message",
+        "sqlite.query"
+      ]
+    },
+    "data_collector": {
+      "allowed_tools": [
+        "filesystem.write_file",
+        "filesystem.create_directory",
+        "fetch.get",
+        "fetch.post",
+        "postgres.execute",
+        "sqlite.execute",
+        "puppeteer.screenshot",
+        "puppeteer.navigate"
+      ]
+    },
+    "monitor": {
+      "allowed_tools": [
+        "filesystem.read_file",
+        "fetch.get",
+        "puppeteer.navigate",
+        "puppeteer.screenshot",
+        "slack.post_message",
+        "github.create_issue"
+      ]
+    }
+  },
+  "tool_rate_limits": {
+    "fetch.get": {
+      "max_calls_per_minute": 60,
+      "max_calls_per_hour": 1000
+    },
+    "fetch.post": {
+      "max_calls_per_minute": 30,
+      "max_calls_per_hour": 500
+    },
+    "puppeteer.navigate": {
+      "max_calls_per_minute": 10,
+      "max_calls_per_hour": 100
+    },
+    "slack.post_message": {
+      "max_calls_per_minute": 5,
+      "max_calls_per_hour": 50
+    }
+  }
+}

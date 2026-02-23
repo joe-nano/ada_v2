@@ -5,12 +5,6 @@ const ChatModule = ({
     inputValue,
     setInputValue,
     handleSend,
-    isModularMode,
-    activeDragElement,
-    position,
-    width = 672, // default max-w-2xl
-    height,
-    onMouseDown
 }) => {
     const messagesEndRef = useRef(null);
 
@@ -23,47 +17,71 @@ const ChatModule = ({
     }, [messages]);
 
     return (
-        <div
-            id="chat"
-            onMouseDown={onMouseDown}
-            className={`absolute px-6 py-4 pointer-events-auto transition-all duration-200 
-            backdrop-blur-xl bg-black/40 border border-white/10 shadow-2xl rounded-2xl
-            ${isModularMode ? (activeDragElement === 'chat' ? 'ring-2 ring-green-500' : 'ring-1 ring-yellow-500/30') : ''}
-        `}
-            style={{
-                left: position.x,
-                top: position.y,
-                transform: 'translate(-50%, 0)', // Aligned top-center
-                width: width,
-                height: height
-            }}
-        >
-            <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-5 pointer-events-none mix-blend-overlay"></div>
-
-            <div
-                className="flex flex-col gap-3 overflow-y-auto mb-4 scrollbar-hide mask-image-gradient relative z-10"
-                style={{ height: height ? `calc(${height}px - 70px)` : '15rem' }}
-            >
-                {messages.slice(-5).map((msg, i) => (
-                    <div key={i} className="text-sm border-l-2 border-cyan-800/50 pl-3 py-1">
-                        <span className="text-cyan-600 font-mono text-xs opacity-70">[{msg.time}]</span> <span className="font-bold text-cyan-300 drop-shadow-sm">{msg.sender}</span>
-                        <div className="text-gray-300 mt-1 leading-relaxed">{msg.text}</div>
+        <div className="flex-1 min-h-0 flex flex-col px-4 py-4">
+            {/* Messages Container */}
+            <div className="flex flex-col gap-3 overflow-y-auto mb-4 pr-2 flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                {messages.slice(-100).map((msg, i) => (
+                    <div
+                        key={i}
+                        className={`rounded-2xl px-4 py-3 transition-all duration-200 ${
+                            msg.sender === 'User'
+                                ? 'ml-auto bg-blue-500/10 border border-blue-400/20 max-w-[85%]'
+                                : 'mr-auto bg-white/40 border border-black/5 max-w-[85%]'
+                        }`}
+                    >
+                        <div className="flex items-center gap-2 mb-1.5">
+                            <span className={`text-[10px] font-semibold tracking-wide ${
+                                msg.sender === 'User' ? 'text-blue-500' : 'text-gray-500'
+                            }`}>
+                                {msg.sender}
+                            </span>
+                            <span className="text-[9px] text-gray-400 font-medium">
+                                {msg.time}
+                            </span>
+                        </div>
+                        <div className={`text-sm leading-relaxed ${
+                            msg.sender === 'User' ? 'text-gray-800' : 'text-gray-700'
+                        }`}>
+                            {msg.text}
+                        </div>
                     </div>
                 ))}
                 <div ref={messagesEndRef} />
             </div>
 
-            <div className="flex gap-2 relative z-10 absolute bottom-4 left-6 right-6">
+            {/* Input Field */}
+            <div className="flex gap-2">
                 <input
                     type="text"
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={handleSend}
-                    placeholder="INITIALIZE COMMAND..."
-                    className="flex-1 bg-black/40 border border-cyan-700/30 rounded-lg p-3 text-cyan-50 focus:outline-none focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/50 transition-all placeholder-cyan-800/50 backdrop-blur-sm"
+                    placeholder="Message J.O.D.A..."
+                    className="flex-1 rounded-full px-5 py-3 text-sm placeholder-gray-400
+                               focus:outline-none focus:ring-2 focus:ring-blue-400/50 transition-all
+                               bg-white/60 border border-black/5"
                 />
+                <button
+                    onClick={() => handleSend({ key: 'Enter' })}
+                    className="apple-button sf-icon bg-blue-500/10 border-blue-400/20 hover:bg-blue-500/20"
+                    title="Send"
+                >
+                    <svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="text-blue-500"
+                    >
+                        <line x1="22" y1="2" x2="11" y2="13"></line>
+                        <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                    </svg>
+                </button>
             </div>
-            {isModularMode && <div className={`absolute -top-6 left-0 text-xs font-bold tracking-widest ${activeDragElement === 'chat' ? 'text-green-500' : 'text-yellow-500/50'}`}>CHAT MODULE</div>}
         </div>
     );
 };

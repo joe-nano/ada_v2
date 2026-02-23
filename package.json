@@ -1,29 +1,41 @@
 {
-  "name": "ada-v2",
+  "name": "joda-v2",
   "version": "1.0.0",
-  "description": "A.D.A V2 - AI Assistant",
+  "description": "J.O.D.A V2 - Jarvis's Operative Developer Assistant",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && npx electron .\"",
-    "build": "vite build",
+    "dev": "concurrently -k \"node ./node_modules/vite/dist/node/cli.js\" \"wait-on tcp:5173 && npx electron .\"",
+    "dev:vps": "node ./node_modules/vite/dist/node/cli.js",
+    "build": "node ./node_modules/vite/dist/node/cli.js build",
     "start": "npx electron ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@heygen/liveavatar-web-sdk": "^0.0.10",
+    "@heygen/streaming-avatar": "^2.1.0",
     "@mediapipe/tasks-vision": "^0.10.22-rc.20250304",
     "@react-three/drei": "^9.99.0",
     "@react-three/fiber": "^8.15.16",
+    "@react-three/postprocessing": "^2.19.1",
+    "@react-three/uikit": "^1.0.62",
+    "@react-three/xr": "^6.6.29",
     "@types/three": "^0.160.0",
     "clsx": "^2.1.0",
     "framer-motion": "^11.0.0",
+    "livekit-client": "^2.16.1",
     "lucide-react": "^0.300.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "socket.io-client": "^4.7.4",
     "tailwind-merge": "^2.2.0",
     "three": "^0.160.0"
+  },
+  "overrides": {
+    "ts-proto-descriptors": {
+      "@bufbuild/protobuf": "^2.0.0"
+    }
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

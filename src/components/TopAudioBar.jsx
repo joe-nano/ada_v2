@@ -17,10 +17,6 @@ const TopAudioBar = ({ audioData }) => {
             const gap = 2;
             const totalBars = Math.floor(width / (barWidth + gap));
 
-            // Simple visualization logic
-            // Assuming audioData is an array of 0-255 values
-            // We mirror it from center
-
             const center = width / 2;
 
             for (let i = 0; i < totalBars / 2; i++) {
@@ -28,7 +24,8 @@ const TopAudioBar = ({ audioData }) => {
                 const percent = value / 255;
                 const barHeight = Math.max(2, percent * height);
 
-                ctx.fillStyle = `rgba(34, 211, 238, ${0.2 + percent * 0.8})`; // Cyan with opacity
+                // Muted blue-gray for light theme
+                ctx.fillStyle = `rgba(100, 116, 139, ${0.2 + percent * 0.6})`;
 
                 // Right side
                 ctx.fillRect(center + i * (barWidth + gap), (height - barHeight) / 2, barWidth, barHeight);
