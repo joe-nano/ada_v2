@@ -38,15 +38,31 @@
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 50%;
-  padding: 12px;
+  padding: 14px;
   transition: all 0.2s cubic-bezier(0.4, 0.0, 0.2, 1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
 }
 
-.apple-button:hover {
-  background: rgba(0, 0, 0, 0.08);
-  transform: scale(1.05);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+/* Only scale on devices with true hover (mouse) — prevents flickering on Vision Pro eye tracking */
+@media (hover: hover) and (pointer: fine) {
+  .apple-button:hover {
+    background: rgba(0, 0, 0, 0.08);
+    transform: scale(1.05);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* For coarse pointers (touch, Vision Pro gaze+pinch) just change background, no transform */
+@media (hover: none), (pointer: coarse) {
+  .apple-button:hover {
+    background: rgba(0, 0, 0, 0.08);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
 }
 
 .apple-button:active {

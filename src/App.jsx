@@ -62,6 +62,50 @@ try {
 function App() {
     const [status, setStatus] = useState('Disconnected');
     const [socketConnected, setSocketConnected] = useState(socket.connected); // Track socket connection reactively
+
+    // Media permissions gate — prompt for mic + camera before app loads
+    const [mediaPermission, setMediaPermission] = useState(() => {
+        return localStorage.getItem('joda_media_granted') === 'true' ? 'granted' : 'pending';
+    });
+
+    const requestMediaPermissions = useCallback(async () => {
+        if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            // Not HTTPS — skip permission prompt, proceed anyway
+            setMediaPermission('granted');
+            localStorage.setItem('joda_media_granted', 'true');
+            return;
+        }
+        try {
+            // Request both mic + camera — this triggers Safari's permission dialog
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            // Stop tracks immediately — we just needed the permission grant
+            stream.getTracks().forEach(t => t.stop());
+        } catch (e) {
+            console.warn('[Permissions] getUserMedia failed:', e);
+            // Try audio-only if video was denied
+            try {
+                const audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioStream.getTracks().forEach(t => t.stop());
+            } catch (e2) {
+                console.warn('[Permissions] audio-only getUserMedia also failed:', e2);
+            }
+        }
+
+        // Also request DeviceOrientation permission (required on iOS/visionOS)
+        if (typeof DeviceOrientationEvent !== 'undefined' &&
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            try {
+                await DeviceOrientationEvent.requestPermission();
+            } catch (e) {
+                console.warn('[Permissions] DeviceOrientation permission failed:', e);
+            }
+        }
+
+        // Proceed regardless of individual permission outcomes
+        setMediaPermission('granted');
+        localStorage.setItem('joda_media_granted', 'true');
+    }, []);
+
     // Auth State
     // WebXR capability detection
     const [xrVRSupported, setXrVRSupported] = useState(false);
@@ -217,6 +261,13 @@ function App() {
             const ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
             aiAudioContextRef.current = ctx;
             aiNextPlayTimeRef.current = ctx.currentTime;
+            // Route to selected speaker device if supported
+            const savedSpeaker = localStorage.getItem('selectedSpeakerId');
+            if (savedSpeaker && 'setSinkId' in ctx) {
+                await ctx.setSinkId(savedSpeaker).catch(e =>
+                    console.warn('[Audio] setSinkId failed:', e)
+                );
+            }
             const gain = ctx.createGain();
             gain.gain.value = speakerVolume;
             gain.connect(ctx.destination);
@@ -319,20 +370,33 @@ function App() {
             return;
         }
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Use selected mic device if available, otherwise system default
+            const savedMic = localStorage.getItem('selectedMicId');
+            const audioConstraints = savedMic
+                ? { deviceId: { ideal: savedMic } }
+                : true;
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
             micStreamRef.current = stream;
 
-            const isSafari = !!(window.webkitAudioContext && !window.AudioContext?.prototype?.createScriptProcessor);
+            // Detect Safari/visionOS: prefer MediaRecorder path since ScriptProcessorNode
+            // is deprecated and unreliable on visionOS Safari
+            const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
 
             if (isSafari && typeof MediaRecorder !== 'undefined') {
-                // Safari/visionOS: use MediaRecorder instead of deprecated ScriptProcessorNode
-                const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+                // Safari/visionOS: use MediaRecorder. Safari doesn't support audio/webm,
+                // so use audio/mp4 (AAC) or let the browser pick its default.
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                    : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
+                    : undefined;
+                const recorderOpts = mimeType ? { mimeType } : {};
+                const recorder = new MediaRecorder(stream, recorderOpts);
                 micProcessorRef.current = recorder;
 
+                const actualFormat = recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm';
                 recorder.ondataavailable = async (event) => {
                     if (isMutedRef.current || !event.data.size) return;
                     const arrayBuffer = await event.data.arrayBuffer();
-                    socket.emit('mic_audio_chunk', { data: arrayBuffer, format: 'webm', sample_rate: 16000 });
+                    socket.emit('mic_audio_chunk', { data: arrayBuffer, format: actualFormat, sample_rate: 16000 });
 
                     if (!micSentFirstChunkRef.current) {
                         micSentFirstChunkRef.current = true;
@@ -516,6 +580,58 @@ function App() {
     const [selectedMicId, setSelectedMicId] = useState(() => localStorage.getItem('selectedMicId') || '');
     const [selectedSpeakerId, setSelectedSpeakerId] = useState(() => localStorage.getItem('selectedSpeakerId') || '');
     const [selectedWebcamId, setSelectedWebcamId] = useState(() => localStorage.getItem('selectedWebcamId') || '');
+
+    // Reusable device enumeration — called on init and after permission grant
+    const enumerateMediaDevices = useCallback(() => {
+        if (!window.isSecureContext || !navigator.mediaDevices?.enumerateDevices) {
+            console.warn('[MediaDevices] Not available (requires HTTPS)');
+            return;
+        }
+        navigator.mediaDevices.enumerateDevices()
+            .then(devs => {
+                const audioInputs = devs.filter(d => d.kind === 'audioinput');
+                const audioOutputs = devs.filter(d => d.kind === 'audiooutput');
+                const videoInputs = devs.filter(d => d.kind === 'videoinput');
+
+                setMicDevices(audioInputs);
+                setSpeakerDevices(audioOutputs);
+                setWebcamDevices(videoInputs);
+
+                const savedMicId = localStorage.getItem('selectedMicId');
+                if (savedMicId && audioInputs.some(d => d.deviceId === savedMicId)) {
+                    setSelectedMicId(savedMicId);
+                } else if (audioInputs.length > 0) {
+                    setSelectedMicId(audioInputs[0].deviceId);
+                }
+
+                const savedSpeakerId = localStorage.getItem('selectedSpeakerId');
+                if (savedSpeakerId && audioOutputs.some(d => d.deviceId === savedSpeakerId)) {
+                    setSelectedSpeakerId(savedSpeakerId);
+                } else if (audioOutputs.length > 0) {
+                    setSelectedSpeakerId(audioOutputs[0].deviceId);
+                }
+
+                const savedWebcamId = localStorage.getItem('selectedWebcamId');
+                if (savedWebcamId && videoInputs.some(d => d.deviceId === savedWebcamId)) {
+                    setSelectedWebcamId(savedWebcamId);
+                } else if (videoInputs.length > 0) {
+                    setSelectedWebcamId(videoInputs[0].deviceId);
+                }
+
+                console.log(`[MediaDevices] Found ${audioInputs.length} mics, ${audioOutputs.length} speakers, ${videoInputs.length} cameras`);
+            })
+            .catch(err => {
+                console.error('[MediaDevices] enumerateDevices failed:', err);
+            });
+    }, []);
+
+    // Re-enumerate devices after permission is granted (devices now have labels)
+    useEffect(() => {
+        if (mediaPermission === 'granted') {
+            enumerateMediaDevices();
+        }
+    }, [mediaPermission, enumerateMediaDevices]);
+
     const [showSettings, setShowSettings] = useState(false);
     const [currentProject, setCurrentProject] = useState('default');
 
@@ -1022,59 +1138,8 @@ function App() {
 
 
 
-        // Get All Media Devices (Microphones, Speakers, Webcams)
-        // Most browsers require a secure context (HTTPS or localhost) for mediaDevices.
-        try {
-            if (!window.isSecureContext || !navigator.mediaDevices?.enumerateDevices) {
-                addMessage(
-                    'System',
-                    'Media devices are unavailable (requires HTTPS or localhost). UI will run without mic/camera.'
-                );
-            } else {
-                navigator.mediaDevices
-                    .enumerateDevices()
-                    .then(devs => {
-                        const audioInputs = devs.filter(d => d.kind === 'audioinput');
-                        const audioOutputs = devs.filter(d => d.kind === 'audiooutput');
-                        const videoInputs = devs.filter(d => d.kind === 'videoinput');
-
-                        setMicDevices(audioInputs);
-                        setSpeakerDevices(audioOutputs);
-                        setWebcamDevices(videoInputs);
-
-                        // Restore saved microphone or use first available
-                        const savedMicId = localStorage.getItem('selectedMicId');
-                        if (savedMicId && audioInputs.some(d => d.deviceId === savedMicId)) {
-                            setSelectedMicId(savedMicId);
-                        } else if (audioInputs.length > 0) {
-                            setSelectedMicId(audioInputs[0].deviceId);
-                        }
-
-                        // Restore saved speaker or use first available
-                        const savedSpeakerId = localStorage.getItem('selectedSpeakerId');
-                        if (savedSpeakerId && audioOutputs.some(d => d.deviceId === savedSpeakerId)) {
-                            setSelectedSpeakerId(savedSpeakerId);
-                        } else if (audioOutputs.length > 0) {
-                            setSelectedSpeakerId(audioOutputs[0].deviceId);
-                        }
-
-                        // Restore saved webcam or use first available
-                        const savedWebcamId = localStorage.getItem('selectedWebcamId');
-                        if (savedWebcamId && videoInputs.some(d => d.deviceId === savedWebcamId)) {
-                            setSelectedWebcamId(savedWebcamId);
-                        } else if (videoInputs.length > 0) {
-                            setSelectedWebcamId(videoInputs[0].deviceId);
-                        }
-                    })
-                    .catch(err => {
-                        console.error('[MediaDevices] enumerateDevices failed:', err);
-                        addMessage('System', `Media device enumeration failed: ${err?.message ?? String(err)}`);
-                    });
-            }
-        } catch (err) {
-            console.error('[MediaDevices] init failed:', err);
-            addMessage('System', `Media device init failed: ${err?.message ?? String(err)}`);
-        }
+        // Initial device enumeration (will re-run with labels after permission grant)
+        enumerateMediaDevices();
 
         // Initialize Hand Landmarker
         const initHandLandmarker = async () => {
@@ -1164,6 +1229,13 @@ function App() {
         if (selectedSpeakerId) {
             localStorage.setItem('selectedSpeakerId', selectedSpeakerId);
             console.log('[Settings] Saved speaker:', selectedSpeakerId);
+            // Route audio to the newly selected device
+            const ctx = aiAudioContextRef.current;
+            if (ctx && 'setSinkId' in ctx) {
+                ctx.setSinkId(selectedSpeakerId).catch(e =>
+                    console.warn('[Audio] setSinkId on device change failed:', e)
+                );
+            }
         }
     }, [selectedSpeakerId]);
 
@@ -1884,6 +1956,47 @@ function App() {
 
 
 
+    // Show permission prompt before the main app
+    if (mediaPermission !== 'granted') {
+        return (
+            <div
+                className="h-screen w-screen flex items-center justify-center"
+                style={{
+                    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif',
+                    background: '#050510',
+                }}
+            >
+                <div className="text-center max-w-md px-6">
+                    <div className="text-5xl mb-6">🎙️</div>
+                    <h1 className="text-2xl font-bold text-white mb-3">JODA Needs Access</h1>
+                    <p className="text-gray-400 text-sm mb-2">
+                        To hear and speak with your AI assistant, JODA needs access to your microphone and camera.
+                    </p>
+                    <p className="text-gray-500 text-xs mb-8">
+                        Your browser will ask for permission. On Apple Vision Pro, tap Allow when prompted.
+                    </p>
+                    <button
+                        onClick={requestMediaPermissions}
+                        className="px-8 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition-colors text-base"
+                        style={{ cursor: 'pointer', minWidth: 200, minHeight: 48 }}
+                    >
+                        Grant Permissions
+                    </button>
+                    <button
+                        onClick={() => {
+                            setMediaPermission('granted');
+                            localStorage.setItem('joda_media_granted', 'true');
+                        }}
+                        className="block mx-auto mt-4 text-gray-500 hover:text-gray-300 text-xs transition-colors"
+                        style={{ cursor: 'pointer', minHeight: 44 }}
+                    >
+                        Skip for now
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="h-screen w-screen overflow-hidden relative" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}>
 
@@ -2002,6 +2115,11 @@ function App() {
                         startSpeechRec: startBrowserSpeechRecognition,
                         isMutedRef: isMutedRef,
                         isOpenAiFallbackRef: openAiFallbackActiveRef,
+                        selectedSpeakerId,
+                        onSpeakerChange: (deviceId) => {
+                            setSelectedSpeakerId(deviceId);
+                            localStorage.setItem('selectedSpeakerId', deviceId);
+                        },
                     }}
                     onPanelResize={handlePanelResize}
                     onPanelRotate={handlePanelRotate}
@@ -2218,6 +2336,27 @@ function App() {
                                 />
                             ),
                         },
+                        {
+                            id: 'avatar', visible: showAvatarCustomizer,
+                            position: spatialPositions.avatar,
+                            width: panelDimensions.avatar?.width ?? 480, height: panelDimensions.avatar?.height ?? 560,
+                            content: (
+                                <AvatarCustomizer
+                                    currentAvatar={avatarConfig}
+                                    onSave={(config) => {
+                                        setAvatarConfig(config);
+                                        localStorage.setItem('joda_avatar_config', JSON.stringify(config));
+                                    }}
+                                    onClose={() => setShowAvatarCustomizer(false)}
+                                />
+                            ),
+                            xrContent: (
+                                <XRGenericPanel
+                                    title="Avatar"
+                                    onClose={() => setShowAvatarCustomizer(false)}
+                                />
+                            ),
+                        },
                     ]}
                     onPanelMove={handlePanelMove}
                 />
@@ -2279,17 +2418,6 @@ function App() {
                 onDeny={handleDenyTool}
             />
 
-            {/* Avatar Customization Modal */}
-            {showAvatarCustomizer && (
-                <AvatarCustomizer
-                    currentAvatar={avatarConfig}
-                    onSave={(config) => {
-                        setAvatarConfig(config);
-                        localStorage.setItem('joda_avatar_config', JSON.stringify(config));
-                    }}
-                    onClose={() => setShowAvatarCustomizer(false)}
-                />
-            )}
         </div>
     );
 }

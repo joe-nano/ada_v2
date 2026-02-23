@@ -7,11 +7,14 @@ import * as THREE from 'three';
  * AvatarController - Character controller wrapping the avatar mesh.
  *
  * Camera behaviour:
- *   - Camera is STATIC by default — it does NOT follow the avatar automatically.
- *   - Right-drag: orbit camera around its current look-at point.
- *   - Middle-click drag or Shift+right-drag: pan camera.
- *   - Scroll: zoom in/out.
- *   - Press 'C' to re-center camera on avatar.
+ *   - If spatialTracking is active (Vision Pro non-VR): camera follows
+ *     the device's head pose (position + orientation) from the tracking hook.
+ *   - Otherwise (desktop):
+ *     - Camera is STATIC by default — it does NOT follow the avatar automatically.
+ *     - Right-drag: orbit camera around its current look-at point.
+ *     - Middle-click drag or Shift+right-drag: pan camera.
+ *     - Scroll: zoom in/out.
+ *     - Press 'C' to re-center camera on avatar.
  *
  * This keeps panels stable on screen since the camera only moves on explicit user input.
  */
@@ -29,6 +32,7 @@ const CAM_MAX_DIST = 20;
 export default function AvatarController({
   locomotionMode = 'hover',
   cameraEnabled = true,
+  spatialTracking = null,  // { active, poseRef } from useSpatialTracking
   children,
 }) {
   const groupRef = useRef();
@@ -86,8 +90,8 @@ export default function AvatarController({
       if (dir) keys.current[dir] = false;
     };
 
-    // In XR, headset owns the camera — don't register keyboard movement
-    if (isInXR) return;
+    // In XR or spatial tracking, headset owns the camera — skip keyboard movement
+    if (isInXR || spatialTracking?.active) return;
 
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup', onUp);
@@ -155,8 +159,8 @@ export default function AvatarController({
 
     const onContextMenu = (e) => e.preventDefault();
 
-    // In XR, headset owns the camera — don't register mouse camera controls
-    if (isInXR) return;
+    // In XR or spatial tracking, headset owns the camera — skip mouse controls
+    if (isInXR || spatialTracking?.active) return;
 
     canvas.addEventListener('pointerdown', onPointerDown);
     window.addEventListener('pointermove', onPointerMove);
@@ -171,7 +175,7 @@ export default function AvatarController({
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [gl, camera, isInXR]);
+  }, [gl, camera, isInXR, spatialTracking?.active]);
 
   // Click-to-move on grid floor
   const onFloorClick = useCallback((e) => {
@@ -239,10 +243,34 @@ export default function AvatarController({
       group.rotation.y += diff * 0.1;
     }
 
-    // --- STATIC CAMERA (only moves on explicit user input) ---
+    // --- CAMERA ---
     // In XR the headset owns the camera — skip all camera manipulation
-    if (cameraEnabled && !isInXR) {
-      // On first frame, initialize camera target to avatar position
+    if (isInXR) {
+      // XR session controls the camera
+    } else if (spatialTracking?.active && spatialTracking.poseRef?.current) {
+      // Spatial tracking mode (Vision Pro non-VR): use device head pose
+      const pose = spatialTracking.poseRef.current;
+
+      // Map AVP pose to scene camera. The pose is relative to where
+      // the device was when tracking started. We add a base offset so
+      // the user looks at the scene origin from a comfortable distance.
+      if (!cameraInitialized.current) {
+        cameraTarget.current.set(pos.x, pos.y + 1, pos.z);
+        cameraInitialized.current = true;
+      }
+      const base = cameraTarget.current;
+
+      // Position: AVP position offset from the base viewing position
+      camera.position.set(
+        base.x + pose.position.x,
+        base.y + pose.position.y,
+        base.z + 6 + pose.position.z  // 6m back from target
+      );
+
+      // Orientation: directly from head tracking
+      camera.quaternion.copy(pose.quaternion);
+    } else if (cameraEnabled) {
+      // Desktop mode: manual orbit/pan/zoom
       if (!cameraInitialized.current) {
         cameraTarget.current.set(pos.x, pos.y + 1, pos.z);
         cameraInitialized.current = true;

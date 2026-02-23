@@ -10,7 +10,7 @@ body {
   margin: 0;
   background: radial-gradient(ellipse at center, #f5f5f7 0%, #e8e8ed 50%, #d1d1d6 100%);
   background-attachment: fixed;
-  overflow: auto;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -98,6 +98,14 @@ body {
   top: 52px;
 }
 
+/* Force R3F canvas below drei Html overlays.
+   On visionOS Safari, GPU-composited canvas can occlude DOM overlays. */
+.spatial-world-container canvas {
+  touch-action: manipulation !important;
+  position: relative;
+  z-index: 0;
+}
+
 .spatial-panel {
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(40px);
@@ -180,6 +188,90 @@ body {
 }
 .panel-pin-btn.pinned {
   background: rgba(59, 130, 246, 0.2);
+}
+
+/* Resize handle — bottom-right corner */
+.panel-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  cursor: nwse-resize;
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    rgba(255, 255, 255, 0.15) 50%,
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  border-radius: 0 0 20px 0;
+  transition: background 150ms;
+  z-index: 10;
+}
+.panel-resize-handle:hover {
+  background: linear-gradient(
+    135deg,
+    transparent 50%,
+    rgba(59, 130, 246, 0.3) 50%,
+    rgba(59, 130, 246, 0.5) 100%
+  );
+}
+
+/* Rotate hint icon in title bar */
+.panel-rotate-hint {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.2);
+  cursor: help;
+  flex-shrink: 0;
+  line-height: 1;
+  user-select: none;
+}
+.panel-rotate-hint:hover {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* === visionOS / eye-tracking interaction support ===
+   visionOS Safari uses eye-gaze + pinch. Elements need:
+   - cursor:pointer so the system marks them as interactive targets
+   - touch-action:manipulation to allow pinch-to-click through
+   - transform-style:flat so hit-testing works inside 3D-transformed containers
+*/
+.spatial-panel {
+  touch-action: manipulation;
+  /* Force flat hit-testing — visionOS Safari has bugs with pointer events
+     inside preserve-3d containers (drei <Html transform>) */
+  transform-style: flat !important;
+}
+
+.spatial-panel-content {
+  transform-style: flat !important;
+}
+
+.spatial-panel button,
+.spatial-panel a,
+.spatial-panel [role="button"],
+.spatial-panel input,
+.spatial-panel select,
+.spatial-panel textarea {
+  cursor: pointer;
+  touch-action: manipulation;
+  /* Ensure each interactive element is its own compositing layer
+     so visionOS can independently hit-test it */
+  will-change: transform;
+}
+
+.spatial-panel input,
+.spatial-panel textarea {
+  cursor: text;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Ensure adequate gaze-target size for panel handle buttons only */
+.panel-handle button,
+.panel-resize-handle {
+  min-width: 32px;
+  min-height: 32px;
 }
 
 /* Spatial-themed overrides for chat/tools inside 3D panels */

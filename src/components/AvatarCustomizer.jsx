@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 /**
  * Avatar Customization Interface
@@ -174,32 +174,27 @@ const AvatarCustomizer = ({ onSave, onClose, currentAvatar }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-white/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                className="glass spatial-card max-w-4xl w-full max-h-[90vh] overflow-y-auto rounded-2xl"
-            >
+        <div className="w-full h-full overflow-y-auto bg-white/90 rounded-2xl">
+            <div className="w-full">
                 {/* Header */}
-                <div className="sticky top-0 glass border-b border-black/5 p-4 flex justify-between items-center rounded-t-2xl">
+                <div className="sticky top-0 bg-white/95 backdrop-blur border-b border-black/5 p-3 flex justify-between items-center rounded-t-2xl z-10">
                     <div>
-                        <h2 className="text-2xl font-bold text-gray-800">Customize Avatar</h2>
-                        <p className="text-sm text-gray-500 mt-1">Choose your AI assistant's appearance</p>
+                        <h2 className="text-lg font-bold text-gray-800">Customize Avatar</h2>
+                        <p className="text-xs text-gray-500 mt-0.5">Choose your AI assistant's appearance</p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="text-gray-400 hover:text-gray-600 text-2xl"
+                        className="text-gray-400 hover:text-gray-600 text-xl leading-none"
                     >
                         ×
                     </button>
                 </div>
 
-                <div className="p-6 space-y-6">
+                <div className="p-4 space-y-4">
                     {/* Avatar Mode Selection */}
                     <div>
-                        <h3 className="text-lg font-semibold text-gray-800 mb-4">Select Avatar Style</h3>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <h3 className="text-sm font-semibold text-gray-800 mb-2">Select Avatar Style</h3>
+                        <div className="grid grid-cols-2 gap-2">
                             {avatarModes.map((mode) => (
                                 <motion.button
                                     key={mode.id}
@@ -207,16 +202,18 @@ const AvatarCustomizer = ({ onSave, onClose, currentAvatar }) => {
                                     whileTap={{ scale: 0.95 }}
                                     onClick={() => setSelectedMode(mode.id)}
                                     className={`
-                                        p-4 rounded-lg border-2 transition-all
+                                        p-2 rounded-lg border-2 transition-all text-left
                                         ${selectedMode === mode.id
                                             ? 'border-blue-500 bg-blue-500/10'
                                             : 'border-gray-200 bg-white/50 hover:border-blue-400/50'
                                         }
                                     `}
                                 >
-                                    <div className="text-4xl mb-2">{mode.icon}</div>
-                                    <div className="text-gray-800 font-semibold">{mode.name}</div>
-                                    <div className="text-xs text-gray-500 mt-1">{mode.description}</div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xl">{mode.icon}</span>
+                                        <span className="text-xs text-gray-800 font-semibold">{mode.name}</span>
+                                    </div>
+                                    <div className="text-[10px] text-gray-500 mt-0.5 leading-tight">{mode.description}</div>
                                 </motion.button>
                             ))}
                         </div>
@@ -408,16 +405,16 @@ const AvatarCustomizer = ({ onSave, onClose, currentAvatar }) => {
                 </div>
 
                 {/* Footer */}
-                <div className="sticky bottom-0 glass border-t border-black/5 p-4 flex justify-end gap-3 rounded-b-2xl">
+                <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-black/5 p-3 flex justify-end gap-2 rounded-b-2xl">
                     <button
                         onClick={onClose}
-                        className="px-6 py-2 glass hover:bg-black/5 rounded-lg text-gray-600 font-medium transition-colors"
+                        className="px-4 py-1.5 text-sm glass hover:bg-black/5 rounded-lg text-gray-600 font-medium transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSave}
-                        className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium"
+                        className="px-4 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 rounded-lg text-white font-medium"
                     >
                         Save Avatar
                     </button>
@@ -425,7 +422,7 @@ const AvatarCustomizer = ({ onSave, onClose, currentAvatar }) => {
 
                 {/* Hidden canvas for photo capture */}
                 <canvas ref={canvasRef} className="hidden" />
-            </motion.div>
+            </div>
         </div>
     );
 };
