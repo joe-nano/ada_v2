@@ -1,46 +1,82 @@
-import React from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Container, Text } from '@react-three/uikit';
 
 /**
  * XRToolsPanel — Full button grid for immersive XR sessions.
  *
- * Mirrors the desktop ToolsModule with all 11 controls arranged in 2 rows.
- * Uses BOTH onClick and onPointerUp for maximum compatibility across
- * XR input modes (hand tracking, transient pointer, controllers).
+ * Vision Pro interaction: gaze at a button to highlight it, then pinch to select.
+ * A dwell timer (800ms) auto-selects if the user holds their gaze.
+ * Visual feedback: bright border glow + scale-like padding change on hover.
  */
 
+const DWELL_MS = 800; // auto-select after looking for this long
+
 function XRButton({ label, active, color = '#22d3ee', onPress }) {
-  const handleEvent = (e) => {
+  const [hovered, setHovered] = useState(false);
+  const dwellTimer = useRef(null);
+
+  // Clear dwell timer on unmount
+  useEffect(() => () => clearTimeout(dwellTimer.current), []);
+
+  const handleEnter = useCallback(() => {
+    setHovered(true);
+    // Start dwell-to-select timer
+    clearTimeout(dwellTimer.current);
+    dwellTimer.current = setTimeout(() => {
+      onPress?.();
+    }, DWELL_MS);
+  }, [onPress]);
+
+  const handleLeave = useCallback(() => {
+    setHovered(false);
+    clearTimeout(dwellTimer.current);
+  }, []);
+
+  const handleEvent = useCallback((e) => {
     e?.stopPropagation?.();
+    clearTimeout(dwellTimer.current); // cancel dwell if manually pressed
     onPress?.();
-  };
+  }, [onPress]);
+
+  // Hover state drives visual highlight
+  const isHighlighted = hovered || active;
+  const borderCol = hovered ? '#ffffff' : active ? color : 'rgba(100, 116, 139, 0.3)';
+  const bgCol = hovered
+    ? 'rgba(255, 255, 255, 0.15)'
+    : active
+      ? 'rgba(34, 211, 238, 0.2)'
+      : 'rgba(30, 41, 59, 0.6)';
+  const textCol = hovered ? '#ffffff' : active ? color : '#94a3b8';
+  const dotCol = hovered ? '#ffffff' : active ? color : '#475569';
 
   return (
     <Container
       flexDirection="column"
       alignItems="center"
       justifyContent="center"
-      width={72}
-      height={52}
-      backgroundColor={active ? 'rgba(34, 211, 238, 0.2)' : 'rgba(30, 41, 59, 0.6)'}
+      width={hovered ? 78 : 72}
+      height={hovered ? 56 : 52}
+      backgroundColor={bgCol}
       borderRadius={12}
-      borderWidth={1}
-      borderColor={active ? color : 'rgba(100, 116, 139, 0.3)'}
+      borderWidth={hovered ? 2 : 1}
+      borderColor={borderCol}
       pointerEvents="auto"
       pointerEventsType="all"
+      onPointerEnter={handleEnter}
+      onPointerLeave={handleLeave}
       onClick={handleEvent}
       onPointerDown={handleEvent}
       onPointerUp={handleEvent}
       cursor="pointer"
     >
-      <Text fontSize={9} color={active ? color : '#94a3b8'} fontWeight="bold">
+      <Text fontSize={hovered ? 10 : 9} color={textCol} fontWeight="bold">
         {label}
       </Text>
       <Container
-        width={5}
-        height={5}
-        borderRadius={3}
-        backgroundColor={active ? color : '#475569'}
+        width={hovered ? 7 : 5}
+        height={hovered ? 7 : 5}
+        borderRadius={4}
+        backgroundColor={dotCol}
         marginTop={3}
       />
     </Container>
