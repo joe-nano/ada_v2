@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from 'react';
+import React, { useRef, useState, useCallback, useEffect } from 'react';
 import { Container, Text } from '@react-three/uikit';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -17,12 +17,20 @@ export default function XRPanel({
   width = 0.6,
   height = 0.5,
   onMove,
+  faceUser = false,
   children,
 }) {
   const groupRef = useRef();
   const [dragging, setDragging] = useState(false);
   const dragOffset = useRef(new THREE.Vector3());
   const pointerIdRef = useRef(null);
+
+  // Auto-face user on mount (look at approximate head position)
+  useEffect(() => {
+    if (faceUser && groupRef.current) {
+      groupRef.current.lookAt(0, 1.5, 0);
+    }
+  }, [faceUser]);
 
   const onPointerDown = useCallback((e) => {
     e.stopPropagation();
@@ -71,17 +79,21 @@ export default function XRPanel({
         borderWidth={1}
         borderColor="rgba(34, 211, 238, 0.3)"
         padding={12}
+        pointerEvents="auto"
+        pointerEventsType="all"
       >
         {/* Grab handle */}
         <Container
           flexDirection="row"
-          height={32}
+          height={48}
           width="100%"
           backgroundColor="rgba(34, 211, 238, 0.1)"
           borderRadius={8}
           alignItems="center"
           justifyContent="center"
           marginBottom={8}
+          pointerEvents="auto"
+          pointerEventsType="all"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -93,7 +105,7 @@ export default function XRPanel({
         </Container>
 
         {/* Content area */}
-        <Container flexDirection="column" flexGrow={1} width="100%">
+        <Container flexDirection="column" flexGrow={1} width="100%" pointerEvents="auto" pointerEventsType="all">
           {children}
         </Container>
       </Container>

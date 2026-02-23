@@ -22,19 +22,30 @@ import AvatarCustomizer from './components/AvatarCustomizer';
 import { xrStore } from './xrStore';
 import XRChatPanel from './components/xr/XRChatPanel';
 import XRToolsPanel from './components/xr/XRToolsPanel';
+import XRGenericPanel from './components/xr/XRGenericPanel';
+import XRKasaPanel from './components/xr/XRKasaPanel';
+import XRImagePreviewPanel from './components/xr/XRImagePreviewPanel';
 
 // Backend connection:
-// - In web mode, prefer connecting back to the same host you loaded the UI from (e.g. http://72.62.165.102:5173)
-// - In Electron (file://), hostname is empty, so fall back to env or the default VPS IP.
+// - HTTPS mode (dev:xr): Socket.IO is proxied through Vite on the same origin,
+//   so we connect to '' (current host) to avoid mixed-content blocks in Safari/WebXR.
+// - HTTP mode: connect directly to the backend on port 8765.
+// - Electron (file://): hostname is empty, fall back to env or the default VPS IP.
 const DEFAULT_VPS_IP = '72.62.165.102';
 const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT ?? '8765';
 const runtimeHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+const isElectron = typeof window !== 'undefined' && window.location.protocol === 'file:';
 const backendHost = import.meta.env.VITE_BACKEND_HOST ?? runtimeHostname ?? '';
-const backendProtocol =
-    typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https' : 'http';
+const backendProtocol = isHttps ? 'https' : 'http';
+
+// In HTTPS mode (no explicit VITE_SOCKET_URL), use same-origin so Vite's proxy handles
+// the /socket.io/ path — avoids mixed-content (https→ws) blocks on Safari / Vision Pro.
 const socketUrl =
     import.meta.env.VITE_SOCKET_URL ??
-    `${backendProtocol}://${backendHost || DEFAULT_VPS_IP}:${BACKEND_PORT}`;
+    (isHttps && !isElectron
+        ? ''  // same-origin: Vite proxies /socket.io/ → http://localhost:8765
+        : `${backendProtocol}://${backendHost || DEFAULT_VPS_IP}:${BACKEND_PORT}`);
 // Force WebSocket transport for high-frequency binary audio streaming.
 // Polling can choke and corrupt payloads ("Too many packets in payload") under load.
 const socket = io(socketUrl, { transports: ['websocket'], upgrade: false });
@@ -1950,6 +1961,11 @@ function App() {
                         speakingTextRef: currentSpeakingTextRef,
                         rpmAvatarUrl: avatarConfig.rpmAvatarUrl,
                     }}
+                    audioHandlers={{
+                        ensureAiAudioContext,
+                        startMic: startBrowserMicStream,
+                        isMutedRef: isMutedRef,
+                    }}
                     panels={[
                         {
                             id: 'chat', visible: true,
@@ -1967,13 +1983,14 @@ function App() {
                                 <XRChatPanel
                                     messages={messages}
                                     isSpeakingRef={isAiSpeakingRef}
+                                    isMuted={isMuted}
                                 />
                             ),
                         },
                         {
                             id: 'tools', visible: true,
                             position: spatialPositions.tools,
-                            width: 520, height: 100,
+                            width: 520, height: 200,
                             content: (
                                 <ToolsModule
                                     isConnected={isConnected}
@@ -2008,9 +2025,25 @@ function App() {
                                     isConnected={isConnected}
                                     isMuted={isMuted}
                                     isSpeakerMuted={isSpeakerMuted}
+                                    isVideoOn={isVideoOn}
+                                    showSettings={showSettings}
+                                    isHandTrackingEnabled={isHandTrackingEnabled}
+                                    showKasaWindow={showKasaWindow}
+                                    showPrinterWindow={showPrinterWindow}
+                                    showCadWindow={showCadWindow}
+                                    showBrowserWindow={showBrowserWindow}
+                                    showMediaGallery={showMediaGallery}
                                     onTogglePower={togglePower}
                                     onToggleMute={toggleMute}
                                     onToggleSpeaker={toggleSpeaker}
+                                    onToggleVideo={toggleVideo}
+                                    onToggleSettings={() => setShowSettings(!showSettings)}
+                                    onToggleHand={() => setIsHandTrackingEnabled(!isHandTrackingEnabled)}
+                                    onToggleKasa={toggleKasaWindow}
+                                    onTogglePrinter={togglePrinterWindow}
+                                    onToggleCad={() => setShowCadWindow(!showCadWindow)}
+                                    onToggleBrowser={() => setShowBrowserWindow(!showBrowserWindow)}
+                                    onToggleMedia={() => setShowMediaGallery(!showMediaGallery)}
                                 />
                             ),
                         },
@@ -2023,6 +2056,13 @@ function App() {
                                     assets={mediaAssets}
                                     onClose={() => setShowMediaGallery(false)}
                                     onClearAll={() => setMediaAssets([])}
+                                />
+                            ),
+                            xrContent: (
+                                <XRGenericPanel
+                                    title="Media Gallery"
+                                    status={`${mediaAssets.length} item${mediaAssets.length !== 1 ? 's' : ''}`}
+                                    onClose={() => setShowMediaGallery(false)}
                                 />
                             ),
                         },
@@ -2042,6 +2082,15 @@ function App() {
                                     onClose={() => setImagePreview(prev => ({ ...prev, visible: false }))}
                                 />
                             ),
+                            xrContent: (
+                                <XRImagePreviewPanel
+                                    status={imagePreview.status}
+                                    prompt={imagePreview.prompt}
+                                    provider={imagePreview.provider}
+                                    error={imagePreview.error}
+                                    onClose={() => setImagePreview(prev => ({ ...prev, visible: false }))}
+                                />
+                            ),
                         },
                         {
                             id: 'browser', visible: showBrowserWindow,
@@ -2053,6 +2102,13 @@ function App() {
                                     logs={browserData.logs}
                                     onClose={() => setShowBrowserWindow(false)}
                                     socket={socket}
+                                />
+                            ),
+                            xrContent: (
+                                <XRGenericPanel
+                                    title="Browser"
+                                    status="Browser automation active"
+                                    onClose={() => setShowBrowserWindow(false)}
                                 />
                             ),
                         },
@@ -2067,6 +2123,13 @@ function App() {
                                     onClose={() => setShowKasaWindow(false)}
                                 />
                             ),
+                            xrContent: (
+                                <XRKasaPanel
+                                    devices={kasaDevices}
+                                    socket={socket}
+                                    onClose={() => setShowKasaWindow(false)}
+                                />
+                            ),
                         },
                         {
                             id: 'printer', visible: showPrinterWindow,
@@ -2075,6 +2138,12 @@ function App() {
                             content: (
                                 <PrinterWindow
                                     socket={socket}
+                                    onClose={() => setShowPrinterWindow(false)}
+                                />
+                            ),
+                            xrContent: (
+                                <XRGenericPanel
+                                    title="3D Printer"
                                     onClose={() => setShowPrinterWindow(false)}
                                 />
                             ),
@@ -2100,6 +2169,12 @@ function App() {
                                     isCameraFlipped={isCameraFlipped}
                                     setIsCameraFlipped={setIsCameraFlipped}
                                     handleFileUpload={handleFileUpload}
+                                    onClose={() => setShowSettings(false)}
+                                />
+                            ),
+                            xrContent: (
+                                <XRGenericPanel
+                                    title="Settings"
                                     onClose={() => setShowSettings(false)}
                                 />
                             ),
