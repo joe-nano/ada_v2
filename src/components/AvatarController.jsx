@@ -106,11 +106,15 @@ export default function AvatarController({
     const canvas = gl.domElement;
 
     const onPointerDown = (e) => {
-      if (e.button === 2) {
+      if (e.button === 0) {
+        // Left-click: orbit (standard 3D navigation)
+        isOrbiting.current = true;
+        lastMouse.current = { x: e.clientX, y: e.clientY };
+      } else if (e.button === 2) {
         if (e.shiftKey) {
           isPanning.current = true;
         } else {
-          isOrbiting.current = true;
+          isPanning.current = true; // Right-click = pan
         }
         lastMouse.current = { x: e.clientX, y: e.clientY };
         e.preventDefault();
@@ -144,8 +148,10 @@ export default function AvatarController({
     };
 
     const onPointerUp = (e) => {
-      if (e.button === 2) {
+      if (e.button === 0) {
         isOrbiting.current = false;
+      }
+      if (e.button === 2) {
         isPanning.current = false;
       }
       if (e.button === 1) {

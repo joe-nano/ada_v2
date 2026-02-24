@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { SpatialContext } from './spatialContext';
 import XRPanel from './XRPanel';
 
+
 const DEFAULT_POSITIONS = {
   chat:         [-3, 1.5, 0],
   tools:        [0, 0.3, 3],
@@ -16,6 +17,7 @@ const DEFAULT_POSITIONS = {
   printer:      [4, 1, 2],
   settings:     [0, 1.5, 4],
   avatar:       [2, 1.5, 3],
+  cad:          [3, 2, -2],
 };
 
 // Forward-facing arc for immersive XR — all panels in front of user at ~1.5-2m
@@ -29,6 +31,7 @@ const XR_POSITIONS = {
   printer:      [-1.2, 1.2, -1.4],
   settings:     [ 0,   1.0, -2.0],
   avatar:       [ 0.6, 1.2, -1.7],
+  cad:          [-0.5, 1.4, -1.7],
 };
 
 export { DEFAULT_POSITIONS, XR_POSITIONS };
@@ -53,6 +56,7 @@ export default function SpatialPanel({
   children,
   xrContent,
   defaultAnchored = true,
+  isGazed = false,
 }) {
   const xrState = useXR();
   const isInXR = !!(xrState?.session);
@@ -95,6 +99,7 @@ export default function SpatialPanel({
     onResize={onResize}
     onRotate={onRotate}
     defaultAnchored={defaultAnchored}
+    isGazed={isGazed}
   >
     {children}
   </DesktopSpatialPanel>;
@@ -116,15 +121,15 @@ function DesktopSpatialPanel({
   onRotate,
   children,
   defaultAnchored = true,
+  isGazed = false,
 }) {
   const groupRef = useRef();
   const { camera, raycaster, gl } = useThree();
-  const { disableCamera, enableCamera } = useContext(SpatialContext);
+  const { disableCamera, enableCamera, portalRef } = useContext(SpatialContext);
 
   const [anchored, setAnchored] = useState(defaultAnchored);
   const [localW, setLocalW] = useState(width);
   const [localH, setLocalH] = useState(height);
-
   // Sync from props when not resizing
   const resizingRef = useRef(false);
   useEffect(() => {
@@ -141,6 +146,16 @@ function DesktopSpatialPanel({
     []
   );
 
+  // Compute initial Y rotation so the panel's readable face (+Z) points
+  // toward the camera. Camera starts at [0, 3, 8] (SpatialWorld config).
+  const initialRotY = useMemo(() => {
+    const p = position || DEFAULT_POSITIONS[id] || [0, 1, 0];
+    const camZ = camera.position.z || 8;
+    const camX = camera.position.x || 0;
+    return Math.atan2(camX - p[0], camZ - p[2]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const anchorOffset = useRef(null);          // camera-local offset (Vector3)
   const cachedWorldPos = useRef(null);        // last computed world position
   const lastCamElements = useRef(null);       // Float64Array(16) for change detection
@@ -150,13 +165,19 @@ function DesktopSpatialPanel({
   const dragOffset = useRef(new THREE.Vector3());
   const intersection = useRef(new THREE.Vector3());
 
-  // Set initial position imperatively (NOT via JSX prop) so R3F never resets it
+  // Set initial position + rotation imperatively (NOT via JSX prop)
+  // so R3F never resets it during React re-renders.
   useEffect(() => {
     if (groupRef.current) {
       groupRef.current.position.copy(initialPos);
+      groupRef.current.rotation.y = initialRotY;
+      // Tilt panels back ~20° so the bottom leans toward the user
+      // (like an angled monitor). Negative X rotation pitches the
+      // bottom edge out of the screen toward the viewer.
+      groupRef.current.rotation.x = -0.45;
       mounted.current = true;
     }
-  }, [initialPos]);
+  }, [initialPos, initialRotY]);
 
   // ---- Anchor: keep panel at fixed viewport position ----
   // Priority -1 ensures this runs BEFORE drei's <Html> (priority 0)
@@ -219,11 +240,98 @@ function DesktopSpatialPanel({
     });
   }, [camera]);
 
+  // Helper: extract clientX/clientY from pointer, mouse, or touch events.
+  // Handles TouchEvent, Touch object, PointerEvent, and MouseEvent.
+  const getXY = useCallback((e) => {
+    if (e.touches?.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    if (e.changedTouches?.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+    // Touch object passed directly (legacy path)
+    if (e.clientX == null && e.identifier != null) return { x: e.clientX ?? 0, y: e.clientY ?? 0 };
+    return { x: e.clientX, y: e.clientY };
+  }, []);
+
+  // Helper: attach drag listeners using pointer capture (Safari fix).
+  //
+  // Safari doesn't propagate pointermove/pointerup from inside CSS
+  // 3D-transformed elements (drei <Html transform>) to document/window.
+  // setPointerCapture() on the R3F canvas forces all subsequent pointer
+  // events to route through the canvas, bypassing the 3D transform boundary.
+  // Falls back to window-level mouse/touch listeners for non-pointer events.
+  const addDragListeners = useCallback((originEvent, onMoveHandler, onUpHandler) => {
+    const canvas = gl.domElement;
+    const pointerId = originEvent?.pointerId;
+    let hasCapture = false;
+    let done = false;
+
+    // Try pointer capture on the R3F canvas — the most reliable Safari fix.
+    // Pointer capture redirects ALL subsequent pointer events for this ID
+    // to the canvas, regardless of CSS 3D transforms or DOM hierarchy.
+    if (pointerId != null && canvas?.setPointerCapture) {
+      try {
+        canvas.setPointerCapture(pointerId);
+        hasCapture = true;
+        console.log('[SpatialPanel] Pointer capture acquired, pointerId:', pointerId);
+      } catch (err) {
+        console.warn('[SpatialPanel] Pointer capture failed:', err.message);
+      }
+    } else {
+      console.log('[SpatialPanel] No pointer capture — pointerId:', pointerId, 'canvas:', !!canvas);
+    }
+
+    const wrappedUp = (upEvent) => {
+      if (done) return;
+      done = true;
+      cleanup();
+      onUpHandler(upEvent);
+    };
+
+    // If pointer capture is active, listen on the canvas — events are
+    // guaranteed to arrive here even on Safari.
+    if (hasCapture) {
+      canvas.addEventListener('pointermove', onMoveHandler);
+      canvas.addEventListener('pointerup', wrappedUp);
+      canvas.addEventListener('lostpointercapture', wrappedUp);
+    }
+
+    // Fallback: window-level listeners for mouse/touch events (and pointer
+    // events when capture isn't available). Use window instead of document —
+    // Safari routes events to window more reliably from 3D-transformed HTML.
+    const win = window;
+    if (!hasCapture) {
+      win.addEventListener('pointermove', onMoveHandler, true);
+      win.addEventListener('pointerup', wrappedUp, true);
+    }
+    win.addEventListener('mousemove', onMoveHandler, true);
+    win.addEventListener('mouseup', wrappedUp, true);
+    win.addEventListener('touchmove', onMoveHandler, { passive: false, capture: true });
+    win.addEventListener('touchend', wrappedUp, true);
+
+    function cleanup() {
+      if (hasCapture) {
+        try { canvas.releasePointerCapture(pointerId); } catch (_) {}
+        canvas.removeEventListener('pointermove', onMoveHandler);
+        canvas.removeEventListener('pointerup', wrappedUp);
+        canvas.removeEventListener('lostpointercapture', wrappedUp);
+      }
+      if (!hasCapture) {
+        win.removeEventListener('pointermove', onMoveHandler, true);
+        win.removeEventListener('pointerup', wrappedUp, true);
+      }
+      win.removeEventListener('mousemove', onMoveHandler, true);
+      win.removeEventListener('mouseup', wrappedUp, true);
+      win.removeEventListener('touchmove', onMoveHandler, { capture: true });
+      win.removeEventListener('touchend', wrappedUp, true);
+    }
+
+    return cleanup;
+  }, [gl]);
+
   // ---- 3D drag (handle bar) ----
   const startDragFull = useCallback((e) => {
     // Alt+drag = rotate, plain drag = move
     if (e.altKey) return;
-    e.stopPropagation();
+    e.stopPropagation?.();
+    e.preventDefault?.();
     dragging.current = true;
     disableCamera();
 
@@ -232,19 +340,22 @@ function DesktopSpatialPanel({
     camera.getWorldDirection(cameraDir);
     dragPlane.current.setFromNormalAndCoplanarPoint(cameraDir, groupPos);
 
+    const { x: startClientX, y: startClientY } = getXY(e);
     const mouse = new THREE.Vector2(
-      (e.clientX / gl.domElement.clientWidth) * 2 - 1,
-      -(e.clientY / gl.domElement.clientHeight) * 2 + 1
+      (startClientX / gl.domElement.clientWidth) * 2 - 1,
+      -(startClientY / gl.domElement.clientHeight) * 2 + 1
     );
     raycaster.setFromCamera(mouse, camera);
     raycaster.ray.intersectPlane(dragPlane.current, intersection.current);
     dragOffset.current.copy(groupPos).sub(intersection.current);
 
-    const onPointerMove = (moveEvent) => {
+    const onMoveHandler = (moveEvent) => {
       if (!dragging.current) return;
+      moveEvent.preventDefault?.();
+      const { x, y } = getXY(moveEvent);
       const m = new THREE.Vector2(
-        (moveEvent.clientX / gl.domElement.clientWidth) * 2 - 1,
-        -(moveEvent.clientY / gl.domElement.clientHeight) * 2 + 1
+        (x / gl.domElement.clientWidth) * 2 - 1,
+        -(y / gl.domElement.clientHeight) * 2 + 1
       );
       raycaster.setFromCamera(m, camera);
       const hit = new THREE.Vector3();
@@ -254,11 +365,9 @@ function DesktopSpatialPanel({
       }
     };
 
-    const onPointerUp = () => {
+    const onUpHandler = () => {
       dragging.current = false;
       enableCamera();
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
 
       // Recompute anchor from new position
       if (anchored && groupRef.current) {
@@ -274,35 +383,41 @@ function DesktopSpatialPanel({
       }
     };
 
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }, [camera, raycaster, gl, disableCamera, enableCamera, id, onMove, anchored]);
+    addDragListeners(e, onMoveHandler, onUpHandler);
+  }, [camera, raycaster, gl, disableCamera, enableCamera, id, onMove, anchored, getXY, addDragListeners]);
 
-  // ---- Rotate (Alt+drag on handle) ----
+  // ---- Rotate (drag on rotate grip, or Alt+drag on handle) ----
+  // Horizontal drag → yaw (Y), vertical drag → pitch (X), Shift+horizontal → roll (Z)
   const startRotate = useCallback((e) => {
-    if (!e.altKey) return;
-    e.stopPropagation();
-    e.preventDefault();
+    console.log(`[SpatialPanel:${id}] startRotate`, e.type, 'pointerId:', e.pointerId);
+    e.stopPropagation?.();
+    e.preventDefault?.();
     disableCamera();
 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const { x: startX, y: startY } = getXY(e);
     const startRotY = groupRef.current?.rotation.y ?? 0;
     const startRotX = groupRef.current?.rotation.x ?? 0;
+    const startRotZ = groupRef.current?.rotation.z ?? 0;
 
-    const onPointerMove = (moveEvent) => {
+    const onMoveHandler = (moveEvent) => {
       if (!groupRef.current) return;
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
-      // Horizontal drag → Y rotation, vertical drag → X rotation
-      groupRef.current.rotation.y = startRotY + dx * 0.005;
-      groupRef.current.rotation.x = startRotX + dy * 0.005;
+      moveEvent.preventDefault?.();
+      const { x, y } = getXY(moveEvent);
+      const dx = x - startX;
+      const dy = y - startY;
+
+      if (moveEvent.shiftKey) {
+        // Shift held → roll (Z axis)
+        groupRef.current.rotation.z = startRotZ + dx * 0.01;
+      } else {
+        // Normal → yaw (Y) + pitch (X) — higher sensitivity for full 360°
+        groupRef.current.rotation.y = startRotY + dx * 0.01;
+        groupRef.current.rotation.x = startRotX + dy * 0.01;
+      }
     };
 
-    const onPointerUp = () => {
+    const onUpHandler = () => {
       enableCamera();
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
 
       if (onRotate && groupRef.current) {
         const r = groupRef.current.rotation;
@@ -310,45 +425,44 @@ function DesktopSpatialPanel({
       }
     };
 
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }, [disableCamera, enableCamera, id, onRotate]);
+    addDragListeners(e, onMoveHandler, onUpHandler);
+  }, [disableCamera, enableCamera, id, onRotate, getXY, addDragListeners]);
 
-  // Combined handler for handle bar
+  // Combined handler for handle bar — Alt+drag = rotate, plain drag = move
   const handlePointerDown = useCallback((e) => {
+    console.log(`[SpatialPanel:${id}] handlePointerDown`, e.type, 'pointerId:', e.pointerId, 'altKey:', e.altKey);
     if (e.altKey) {
       startRotate(e);
     } else {
       startDragFull(e);
     }
-  }, [startRotate, startDragFull]);
+  }, [startRotate, startDragFull, id]);
 
   // ---- Resize (bottom-right corner drag) ----
   const startResize = useCallback((e) => {
-    e.stopPropagation();
-    e.preventDefault();
+    console.log(`[SpatialPanel:${id}] startResize`, e.type, 'pointerId:', e.pointerId);
+    e.stopPropagation?.();
+    e.preventDefault?.();
     disableCamera();
     resizingRef.current = true;
 
-    const startX = e.clientX;
-    const startY = e.clientY;
+    const { x: startX, y: startY } = getXY(e);
     const startW = localW;
     const startH = localH;
 
-    const onPointerMove = (moveEvent) => {
-      const dx = moveEvent.clientX - startX;
-      const dy = moveEvent.clientY - startY;
+    const onMoveHandler = (moveEvent) => {
+      moveEvent.preventDefault?.();
+      const { x, y } = getXY(moveEvent);
+      const dx = x - startX;
+      const dy = y - startY;
       setLocalW(Math.min(MAX_PX_W, Math.max(MIN_PX_W, startW + dx)));
       setLocalH(Math.min(MAX_PX_H, Math.max(MIN_PX_H, startH + dy)));
     };
 
-    const onPointerUp = () => {
+    const onUpHandler = () => {
       resizingRef.current = false;
       enableCamera();
-      window.removeEventListener('pointermove', onPointerMove);
-      window.removeEventListener('pointerup', onPointerUp);
 
-      // Read the latest values from state via a callback
       setLocalW((w) => {
         setLocalH((h) => {
           if (onResize) onResize(id, w, h);
@@ -358,17 +472,34 @@ function DesktopSpatialPanel({
       });
     };
 
-    window.addEventListener('pointermove', onPointerMove);
-    window.addEventListener('pointerup', onPointerUp);
-  }, [disableCamera, enableCamera, id, onResize, localW, localH]);
+    addDragListeners(e, onMoveHandler, onUpHandler);
+  }, [disableCamera, enableCamera, id, onResize, localW, localH, getXY, addDragListeners]);
 
-  // NOTE: No position prop on <group>. Managed entirely via ref.
+  // ---- Quick rotate by fixed increments (button bar) ----
+  const rotateBy = useCallback((axis, angle) => {
+    if (!groupRef.current) return;
+    groupRef.current.rotation[axis] += angle;
+    if (onRotate) {
+      const r = groupRef.current.rotation;
+      onRotate(id, [r.x, r.y, r.z]);
+    }
+  }, [id, onRotate]);
+
+  // Position + rotation as JSX props so drei <Html> gets valid coords on
+  // the very first frame (before useEffect/useFrame run). useFrame(-1) still
+  // overwrites position every frame in anchored mode, and drag handlers
+  // update via ref — so the JSX prop only matters for the initial render.
+  const initialPosArr = useMemo(() => initialPos.toArray(), [initialPos]);
+  const initialRotArr = useMemo(() => [-0.45, initialRotY, 0], [initialRotY]);
+
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} position={initialPosArr} rotation={initialRotArr}>
       <Html
         transform
         distanceFactor={5}
         zIndexRange={[100, 0]}
+        portal={portalRef}
+        onOcclude={() => null}
         style={{
           width: `${localW}px`,
           height: `${localH}px`,
@@ -378,13 +509,14 @@ function DesktopSpatialPanel({
         }}
       >
         <div
-          className="spatial-panel"
+          className={`spatial-panel${isGazed ? ' gaze-active' : ''}`}
           style={{
             width: `${localW}px`,
             height: `${localH}px`,
             touchAction: 'manipulation',
           }}
         >
+          {/* Title bar — drag to move */}
           <div className="panel-handle" onPointerDown={handlePointerDown}>
             <button
               className={`panel-pin-btn ${anchored ? 'pinned' : ''}`}
@@ -397,13 +529,23 @@ function DesktopSpatialPanel({
             <div className="panel-handle-grip" />
             <div className="panel-handle-label">{id.toUpperCase()}</div>
             <div
-              className="panel-rotate-hint"
-              title="Alt + drag to rotate"
+              className="panel-rotate-grip"
+              title="Drag to rotate (Shift = roll)"
+              onPointerDown={(e) => { e.stopPropagation(); startRotate(e); }}
             >
               ↻
             </div>
           </div>
-          <div className="spatial-panel-content" style={{ height: `calc(100% - 28px)`, overflow: 'auto' }}>
+          {/* Rotation button bar */}
+          <div className="panel-rotate-bar">
+            <button title="Rotate left (Y)" onClick={() => rotateBy('y', 0.3)}>⟲Y</button>
+            <button title="Rotate right (Y)" onClick={() => rotateBy('y', -0.3)}>⟳Y</button>
+            <button title="Tilt up (X)" onClick={() => rotateBy('x', -0.15)}>↑X</button>
+            <button title="Tilt down (X)" onClick={() => rotateBy('x', 0.15)}>↓X</button>
+            <button title="Roll left (Z)" onClick={() => rotateBy('z', 0.15)}>⟲Z</button>
+            <button title="Roll right (Z)" onClick={() => rotateBy('z', -0.15)}>⟳Z</button>
+          </div>
+          <div className="spatial-panel-content" style={{ height: `calc(100% - 56px)`, overflow: 'auto' }}>
             {children}
           </div>
           {/* Resize handle — bottom-right corner */}

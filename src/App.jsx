@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import io from 'socket.io-client';
 
 import TopAudioBar from './components/TopAudioBar';
-import CadWindow from './components/CadWindow';
+import { CadPanelContent } from './components/CadWindow';
 import BrowserWindow from './components/BrowserWindow';
 import ChatModule from './components/ChatModule';
 import ToolsModule from './components/ToolsModule';
@@ -25,6 +25,7 @@ import XRToolsPanel from './components/xr/XRToolsPanel';
 import XRGenericPanel from './components/xr/XRGenericPanel';
 import XRKasaPanel from './components/xr/XRKasaPanel';
 import XRImagePreviewPanel from './components/xr/XRImagePreviewPanel';
+import DebugOverlay from './components/DebugOverlay';
 
 // Backend connection:
 // - HTTPS mode (dev:xr): Socket.IO is proxied through Vite on the same origin,
@@ -378,68 +379,66 @@ function App() {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
             micStreamRef.current = stream;
 
-            // Detect Safari/visionOS: prefer MediaRecorder path since ScriptProcessorNode
-            // is deprecated and unreliable on visionOS Safari
-            const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+            // All browsers: use ScriptProcessorNode to send raw PCM Int16.
+            // MediaRecorder on Safari sends audio/mp4 (AAC) which the backend
+            // cannot decode for transcription. ScriptProcessorNode works on
+            // Safari 17+ / visionOS Safari and sends raw PCM that the backend expects.
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
 
-            if (isSafari && typeof MediaRecorder !== 'undefined') {
-                // Safari/visionOS: use MediaRecorder. Safari doesn't support audio/webm,
-                // so use audio/mp4 (AAC) or let the browser pick its default.
-                const mimeType = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
-                    : MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4'
-                    : undefined;
-                const recorderOpts = mimeType ? { mimeType } : {};
-                const recorder = new MediaRecorder(stream, recorderOpts);
-                micProcessorRef.current = recorder;
-
-                const actualFormat = recorder.mimeType?.includes('mp4') ? 'mp4' : 'webm';
-                recorder.ondataavailable = async (event) => {
-                    if (isMutedRef.current || !event.data.size) return;
-                    const arrayBuffer = await event.data.arrayBuffer();
-                    socket.emit('mic_audio_chunk', { data: arrayBuffer, format: actualFormat, sample_rate: 16000 });
-
-                    if (!micSentFirstChunkRef.current) {
-                        micSentFirstChunkRef.current = true;
-                        console.log('[MicStream] Safari: Sent first audio chunk via MediaRecorder');
-                    }
-                };
-
-                recorder.start(250); // emit chunks every 250ms
-                addMessage('System', 'Browser mic streaming enabled (Safari mode).');
-            } else {
-                // Chrome/Firefox: ScriptProcessorNode path
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-                micAudioContextRef.current = audioContext;
-                micSampleRateRef.current = audioContext.sampleRate || 16000;
-                const source = audioContext.createMediaStreamSource(stream);
-                micSourceNodeRef.current = source;
-
-                const processor = audioContext.createScriptProcessor(4096, 1, 1);
-                micProcessorRef.current = processor;
-
-                processor.onaudioprocess = (event) => {
-                    if (isMutedRef.current) return;
-                    const input = event.inputBuffer.getChannelData(0);
-                    const int16 = new Int16Array(input.length);
-                    for (let i = 0; i < input.length; i++) {
-                        const s = Math.max(-1, Math.min(1, input[i]));
-                        int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-                    }
-                    socket.emit('mic_audio_chunk', { data: int16.buffer, sample_rate: micSampleRateRef.current });
-
-                    if (!micSentFirstChunkRef.current) {
-                        micSentFirstChunkRef.current = true;
-                        console.log('[MicStream] Sent first audio chunk', {
-                            samples: int16.length,
-                            sampleRate: micSampleRateRef.current
-                        });
-                    }
-                };
-
-                source.connect(processor);
-                processor.connect(audioContext.destination);
-                addMessage('System', 'Browser mic streaming enabled.');
+            // Safari suspends new AudioContexts until resumed after a user gesture.
+            // Without this, onaudioprocess never fires and no audio is transmitted.
+            if (audioContext.state === 'suspended') {
+                await audioContext.resume();
             }
+
+            micAudioContextRef.current = audioContext;
+            // Safari may ignore the requested sampleRate and use the device native
+            // rate (44100/48000). Read the actual rate so the backend knows.
+            micSampleRateRef.current = audioContext.sampleRate || 16000;
+            console.log('[MicStream] AudioContext state:', audioContext.state, 'sampleRate:', audioContext.sampleRate);
+            // Tell backend the actual sample rate so it can resample if needed.
+            socket.emit('mic_sample_rate', { sample_rate: micSampleRateRef.current });
+            const source = audioContext.createMediaStreamSource(stream);
+            micSourceNodeRef.current = source;
+
+            const processor = audioContext.createScriptProcessor(4096, 1, 1);
+            micProcessorRef.current = processor;
+
+            let chunkCount = 0;
+            processor.onaudioprocess = (event) => {
+                if (isMutedRef.current) return;
+                // Safari can re-suspend the context; nudge it back.
+                if (audioContext.state === 'suspended') {
+                    audioContext.resume();
+                }
+                const input = event.inputBuffer.getChannelData(0);
+                const int16 = new Int16Array(input.length);
+                for (let i = 0; i < input.length; i++) {
+                    const s = Math.max(-1, Math.min(1, input[i]));
+                    int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+                }
+                // Send as raw ArrayBuffer (not wrapped in object) for Safari compatibility.
+                // Socket.IO handles binary ArrayBuffer natively on all browsers.
+                // Then send sample_rate separately so backend can resample if needed.
+                socket.emit('mic_audio_chunk', int16.buffer);
+
+                chunkCount++;
+                if (chunkCount === 1) {
+                    console.log('[MicStream] First audio chunk sent', {
+                        samples: int16.length,
+                        sampleRate: audioContext.sampleRate,
+                        ctxState: audioContext.state,
+                        socketConnected: socket.connected
+                    });
+                }
+                if (chunkCount % 50 === 0) {
+                    console.log('[MicStream] chunks sent:', chunkCount, 'ctxState:', audioContext.state);
+                }
+            };
+
+            source.connect(processor);
+            processor.connect(audioContext.destination);
+            addMessage('System', 'Browser mic streaming enabled.');
         } catch (err) {
             console.error('[MicStream] failed:', err);
             addMessage('System', `Mic streaming failed: ${err?.message ?? String(err)}`);
@@ -448,9 +447,7 @@ function App() {
 
     const stopBrowserMicStream = async () => {
         try {
-            if (micProcessorRef.current instanceof MediaRecorder) {
-                micProcessorRef.current.stop();
-            } else if (micProcessorRef.current) {
+            if (micProcessorRef.current) {
                 micProcessorRef.current.disconnect();
                 micProcessorRef.current.onaudioprocess = null;
             }
@@ -662,19 +659,13 @@ function App() {
         setPanelRotations(prev => ({ ...prev, [id]: rotation }));
     }, []);
 
-    // Legacy 2D state kept for CadWindow overlay positioning
-    const [elementPositions, setElementPositions] = useState({
-        cad: { x: window.innerWidth / 2 + 300, y: window.innerHeight / 2 },
-    });
-    const [elementSizes] = useState({
-        cad: { w: 400, h: 400 },
-    });
-    const [activeDragElement, setActiveDragElement] = useState(null);
 
     // Hand Control State
     const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
     const [isPinching, setIsPinching] = useState(false);
     const [isHandTrackingEnabled, setIsHandTrackingEnabled] = useState(false); // DEFAULT OFF
+    const [vrPerspective, setVrPerspective] = useState('first'); // 'first' | 'third'
+    const [vrLocomotionMode, setVrLocomotionMode] = useState('smooth'); // 'smooth' | 'teleport'
     const [cursorSensitivity, setCursorSensitivity] = useState(2.0);
     const [isCameraFlipped, setIsCameraFlipped] = useState(false); // Gesture control camera flip
 
@@ -728,19 +719,6 @@ function App() {
     }, []);
 
     // Legacy centering removed — spatial 3D world handles panel positioning.
-
-    // Utility: Clamp position to viewport for 2D overlays
-    const clampToViewport = (pos, size) => {
-        const margin = 10;
-        const topBarHeight = 60;
-        const width = window.innerWidth;
-        const height = window.innerHeight;
-
-        return {
-            x: Math.max(size.w / 2 + margin, Math.min(width - size.w / 2 - margin, pos.x)),
-            y: Math.max(size.h / 2 + margin + topBarHeight, Math.min(height - size.h / 2 - margin, pos.y))
-        };
-    };
 
     // Ref to track if model has been auto-connected (prevents duplicate connections)
     const hasAutoConnectedRef = useRef(false);
@@ -901,15 +879,6 @@ function App() {
             setCadData(data);
             setCadThoughts(''); // Clear thoughts when generation complete
             setShowCadWindow(true); // Open window when data arrives
-            // Auto-show the window if it's hidden, clamped to viewport
-            if (!elementPositions.cad) {
-                const size = { w: 400, h: 400 };
-                const clamped = clampToViewport({ x: window.innerWidth / 2 + 150, y: window.innerHeight / 2 }, size);
-                setElementPositions(prev => ({
-                    ...prev,
-                    cad: clamped
-                }));
-            }
         });
         socket.on('cad_status', (data) => {
             console.log("Received CAD Status:", data);
@@ -926,15 +895,6 @@ function App() {
                 setShowCadWindow(true);
                 if (data.status === 'generating' && data.attempt === 1) {
                     setCadThoughts(''); // Clear previous thoughts for new generation
-                }
-                // Auto-show the window, clamped to viewport
-                if (!elementPositions.cad) {
-                    const size = { w: 400, h: 400 };
-                    const clamped = clampToViewport({ x: window.innerWidth / 2 + 150, y: window.innerHeight / 2 }, size);
-                    setElementPositions(prev => ({
-                        ...prev,
-                        cad: clamped
-                    }));
                 }
             } else if (data.status === 'failed') {
                 // Keep loading state but show error
@@ -1069,12 +1029,6 @@ function App() {
         // Handle Print Window Request (from CadWindow)
         socket.on('request_print_window', () => {
             setShowPrinterWindow(true);
-            const size = { w: 380, h: 380 };
-            const clamped = clampToViewport({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, size);
-            setElementPositions(prev => ({
-                ...prev,
-                printer: clamped
-            }));
         });
 
         // Kasa Devices
@@ -1598,9 +1552,8 @@ function App() {
                     activeDragElementRef.current = null;
                 }
 
-                // Sync state for visual feedback (only on change)
+                // Sync ref for visual feedback (only on change)
                 if (activeDragElementRef.current !== lastActiveDragElementRef.current) {
-                    setActiveDragElement(activeDragElementRef.current);
                     lastActiveDragElementRef.current = activeDragElementRef.current;
                 }
 
@@ -1997,6 +1950,9 @@ function App() {
         );
     }
 
+    // Panels defined inline in SpatialWorld JSX below (not useMemo).
+    // useMemo was broken by unstable deps (handleSend, toggles).
+
     return (
         <div className="h-screen w-screen overflow-hidden relative" style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif' }}>
 
@@ -2201,6 +2157,10 @@ function App() {
                                     onToggleCad={() => setShowCadWindow(!showCadWindow)}
                                     onToggleBrowser={() => setShowBrowserWindow(!showBrowserWindow)}
                                     onToggleMedia={() => setShowMediaGallery(!showMediaGallery)}
+                                    vrPerspective={vrPerspective}
+                                    vrLocomotionMode={vrLocomotionMode}
+                                    onTogglePerspective={() => setVrPerspective(p => p === 'first' ? 'third' : 'first')}
+                                    onToggleLocomotion={() => setVrLocomotionMode(m => m === 'smooth' ? 'teleport' : 'smooth')}
                                 />
                             ),
                         },
@@ -2382,34 +2342,6 @@ function App() {
                 </div>
             </div>
 
-            {/* CadWindow - Stays as 2D overlay (nested Canvas conflicts with drei Html) */}
-            {showCadWindow && (
-                <div className="fixed inset-0 z-40 flex items-center justify-center pointer-events-none">
-                    <div
-                        className="pointer-events-auto flex flex-col overflow-hidden rounded-2xl spatial-panel"
-                        style={{ width: 400, height: 400 }}
-                    >
-                        <div className="h-8 flex items-center justify-between px-3 shrink-0 panel-handle">
-                            <span className="text-xs font-bold tracking-widest text-gray-400">CAD PROTOTYPE</span>
-                            <button
-                                onClick={() => setShowCadWindow(false)}
-                                className="text-gray-400 hover:text-red-400 hover:bg-red-500/20 p-1 rounded transition-colors"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <div className="flex-1 min-h-0">
-                            <CadWindow
-                                data={cadData}
-                                thoughts={cadThoughts}
-                                retryInfo={cadRetryInfo}
-                                onClose={() => setShowCadWindow(false)}
-                                socket={socket}
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Tool Confirmation Modal */}
             <ConfirmationPopup
@@ -2417,6 +2349,9 @@ function App() {
                 onConfirm={handleConfirmTool}
                 onDeny={handleDenyTool}
             />
+
+            {/* On-screen debug console for Vision Pro — disabled during debugging */}
+            {/* <DebugOverlay /> */}
 
         </div>
     );

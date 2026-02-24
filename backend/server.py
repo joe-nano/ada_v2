@@ -6,6 +6,9 @@ import asyncio
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
+from dotenv import load_dotenv
+load_dotenv(dotenv_path=__file__ and __import__('pathlib').Path(__file__).resolve().parent.parent / '.env')
+
 import socketio
 import uvicorn
 from fastapi import FastAPI
@@ -214,6 +217,7 @@ async def _relay_to_telegram_via_clawdbot(text: str):
 _openai_histories = {}
 _mic_debug_seen: set[str] = set()
 _mic_resample_state: dict[str, float] = {}
+_mic_sample_rates: dict[str, int] = {}  # per-session sample rate from browser
 _browser_secrets: dict[str, dict[str, str]] = {}
 _browser_skills = BrowserSkillsStore()
 _scheduler_store = SchedulerStore()
@@ -584,6 +588,53 @@ def _get_openai_model() -> str:
 def _openai_enabled() -> bool:
     return bool(os.getenv("OPENAI_API_KEY"))
 
+
+def _claude_enabled() -> bool:
+    return bool(os.getenv("ANTHROPIC_API_KEY"))
+
+
+def _get_claude_model() -> str:
+    return os.getenv("CLAUDE_MODEL") or "claude-sonnet-4-20250514"
+
+
+async def _claude_respond(sid: str, user_text: str) -> str:
+    """Generate a text response via Anthropic Claude API."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
+
+    model = _get_claude_model()
+    history = _openai_histories.setdefault(sid, [])
+    history.append({"role": "user", "content": user_text})
+    history[:] = history[-12:]
+
+    system_text = (
+        "You are JODA (pronounced YUODA), an Advanced Depiction Architect. "
+        "Be concise and practical. If you don't know something, ask a clarifying question."
+    )
+
+    # Build messages for Claude API (alternating user/assistant)
+    messages = [{"role": m["role"], "content": m["content"]} for m in history]
+
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+        response = await client.messages.create(
+            model=model,
+            max_tokens=1024,
+            system=system_text,
+            messages=messages,
+        )
+        out = response.content[0].text.strip()
+        if not out:
+            raise RuntimeError("Claude returned empty content")
+        history.append({"role": "assistant", "content": out})
+        history[:] = history[-12:]
+        return out
+    except Exception as e:
+        raise RuntimeError(f"Claude API error: {e}")
+
+
 def _ollama_base_url() -> str:
     return os.getenv("OLLAMA_BASE_URL") or "http://127.0.0.1:11434"
 
@@ -592,9 +643,8 @@ def _ollama_models() -> list[str]:
     raw = (os.getenv("OLLAMA_MODELS") or "").strip()
     if raw:
         return [m.strip() for m in raw.split(",") if m.strip()]
-    # Reasonable defaults (prefer common local names).
-    # We'll still auto-detect available models via /api/tags and pick a match.
-    return ["gpt-oss", "deepseek-r1"]
+    # Default to gpt-oss only (no deepseek).
+    return ["gpt-oss"]
 
 
 async def _ollama_list_models() -> list[str]:
@@ -739,6 +789,53 @@ async def _openai_respond(sid: str, user_text: str) -> str:
     history.append({"role": "assistant", "content": out_text})
     history[:] = history[-12:]
     return out_text
+
+async def _text_fallback_chain(sid: str, text: str, context: str = "") -> str | None:
+    """Try Claude → OpenAI → Ollama (gpt-oss) for text-only responses.
+
+    Returns the response text, or None if all providers failed (errors are
+    emitted to the client via Socket.IO).
+    """
+    prefix = f"{context}; " if context else ""
+
+    # 1. Claude (preferred text fallback)
+    if _claude_enabled():
+        await sio.emit(
+            'status',
+            {'msg': f'{prefix}Using Claude ({_get_claude_model()}; text-only)'},
+            room=sid,
+        )
+        try:
+            return await _claude_respond(sid, text)
+        except Exception as e:
+            print(f"[FALLBACK] Claude failed: {e}")
+            await sio.emit('status', {'msg': f'Claude failed; trying next provider...'}, room=sid)
+
+    # 2. OpenAI (if configured)
+    if _openai_enabled():
+        await sio.emit(
+            'status',
+            {'msg': f'{prefix}Using OpenAI ({_get_openai_model()}; text-only)'},
+            room=sid,
+        )
+        try:
+            return await _openai_respond(sid, text)
+        except Exception as e:
+            print(f"[FALLBACK] OpenAI failed: {e}")
+            await sio.emit('status', {'msg': f'OpenAI failed; trying Ollama...'}, room=sid)
+
+    # 3. Ollama (gpt-oss, final fallback)
+    await sio.emit(
+        'status',
+        {'msg': f'{prefix}Using Ollama ({", ".join(_ollama_models())}; text-only)'},
+        room=sid,
+    )
+    try:
+        return await _ollama_respond(sid, text)
+    except Exception as e:
+        await sio.emit('error', {'msg': f'All text providers failed. Last error: {e}'}, room=sid)
+        return None
+
 
 DEFAULT_SETTINGS = {
     "face_auth_enabled": False, # Default OFF as requested
@@ -1037,14 +1134,10 @@ async def relay_ask(payload: dict):
 
     sid = "telegram-relay"
     try:
-        # Prefer OpenAI if configured, but fall back to Ollama on quota/errors.
-        if _openai_enabled():
-            try:
-                out = await _openai_respond(sid, str(text))
-            except Exception:
-                out = await _ollama_respond(sid, str(text))
-        else:
-            out = await _ollama_respond(sid, str(text))
+        # Fallback chain: Claude → OpenAI → Ollama
+        out = await _text_fallback_chain(sid, str(text), context="Relay")
+        if out is None:
+            raise RuntimeError("All text providers failed")
 
         # Keep frontend UI in sync too (optional):
         try:
@@ -1108,6 +1201,7 @@ async def disconnect(sid):
     _openai_histories.pop(sid, None)
     _mic_debug_seen.discard(sid)
     _mic_resample_state.pop(sid, None)
+    _mic_sample_rates.pop(sid, None)
     _browser_secrets.pop(sid, None)
 
 
@@ -1162,9 +1256,15 @@ async def start_audio(sid, data=None):
 
     print("Starting Audio Loop...")
 
-    # If Gemini isn't configured, keep the UI usable via OpenAI/Ollama text fallback.
+    # If Gemini isn't configured, keep the UI usable via Claude/OpenAI/Ollama text fallback.
     if not os.getenv("GEMINI_API_KEY"):
-        if _openai_enabled():
+        if _claude_enabled():
+            await sio.emit(
+                'status',
+                {'msg': f'JODA Started (Claude Fallback: {_get_claude_model()} text-only)'},
+                room=sid,
+            )
+        elif _openai_enabled():
             await sio.emit(
                 'status',
                 {'msg': f'JODA Started (OpenAI Fallback: {_get_openai_model()} text-only)'},
@@ -1183,7 +1283,7 @@ async def start_audio(sid, data=None):
             except Exception:
                 await sio.emit(
                     'status',
-                    {'msg': 'JODA Started (No GEMINI_API_KEY; set GEMINI_API_KEY, OPENAI_API_KEY, or run Ollama)'},
+                    {'msg': 'JODA Started (No GEMINI_API_KEY; set ANTHROPIC_API_KEY, OPENAI_API_KEY, or run Ollama)'},
                     room=sid,
                 )
         return
@@ -1349,9 +1449,9 @@ async def start_audio(sid, data=None):
 
         print("Creating asyncio task for AudioLoop.run()")
         start_message = (
-            'Introduce yourself by saying exactly: "I am JODA, your Advanced Depiction Architect, a creation '
-            'of Dr Joe Davids. I\'m here to assist you with your endeavors!" When speaking aloud, pronounce '
-            '"JODA" as "YUODA" (pronounced "YOO-DA"). '
+            'Introduce yourself by saying exactly: "I am Joda, the conversational AI running this show, '
+            'created by Dr Joseph Davids." When speaking aloud, pronounce '
+            '"Joda" as "YUODA" (pronounced "YOO-DA"). '
             "You can browse the filesystem: projects are real folders on disk and can be listed/read; you are "
             "not limited to abstract contexts."
         )
@@ -1384,13 +1484,14 @@ async def start_audio(sid, data=None):
                             audio_loop.stop()
                         except Exception:
                             pass
-                        # Clear global so user_input routes into OpenAI/Ollama fallback.
+                        # Clear global so user_input routes into Claude/OpenAI/Ollama fallback.
                         globals()["audio_loop"] = None
-                        fallback = (
-                            f"Gemini unavailable; using OpenAI fallback ({_get_openai_model()}; text-only)"
-                            if _openai_enabled()
-                            else f"Gemini unavailable; using Ollama fallback ({', '.join(_ollama_models())}; text-only)"
-                        )
+                        if _claude_enabled():
+                            fallback = f"Gemini unavailable; using Claude fallback ({_get_claude_model()}; text-only)"
+                        elif _openai_enabled():
+                            fallback = f"Gemini unavailable; using OpenAI fallback ({_get_openai_model()}; text-only)"
+                        else:
+                            fallback = f"Gemini unavailable; using Ollama fallback ({', '.join(_ollama_models())}; text-only)"
                         asyncio.create_task(sio.emit("status", {"msg": fallback}))
                 except Exception:
                     pass
@@ -1421,14 +1522,20 @@ async def start_audio(sid, data=None):
         print(f"[SERVER] {msg}")
         await sio.emit("status", {"msg": msg}, room=sid)
         # Keep UI usable via text-only fallback.
-        if _openai_enabled():
+        if _claude_enabled():
+            await sio.emit(
+                "status",
+                {"msg": f"Using Claude fallback ({_get_claude_model()}; text-only)"},
+                room=sid,
+            )
+        elif _openai_enabled():
             await sio.emit(
                 "status",
                 {"msg": f"Using OpenAI fallback ({_get_openai_model()}; text-only)"},
                 room=sid,
             )
         else:
-            await sio.emit("status", {"msg": "Gemini unavailable; set OPENAI_API_KEY or run Ollama"}, room=sid)
+            await sio.emit("status", {"msg": "Gemini unavailable; set ANTHROPIC_API_KEY, OPENAI_API_KEY, or run Ollama"}, room=sid)
         return
         
     except Exception as e:
@@ -1804,39 +1911,11 @@ async def user_input(sid, data):
         return
 
     if not audio_loop:
-        # Text-only fallback
+        # Text-only fallback (no audio loop)
         if text:
-            if _openai_enabled():
-                await sio.emit(
-                    'status',
-                    {'msg': f'Using OpenAI fallback ({_get_openai_model()}; text-only)'},
-                    room=sid,
-                )
-                try:
-                    out = await _openai_respond(sid, text)
-                except Exception as e:
-                    await sio.emit('status', {'msg': f'OpenAI fallback failed; trying Ollama: {e}'}, room=sid)
-                    try:
-                        out = await _ollama_respond(sid, text)
-                        await sio.emit(
-                            'status',
-                            {'msg': f'Using Ollama fallback ({", ".join(_ollama_models())}; text-only)'},
-                            room=sid,
-                        )
-                    except Exception as oe:
-                        await sio.emit('error', {'msg': f'Fallback error (OpenAI+Ollama): {oe}'}, room=sid)
-                        return
-            else:
-                await sio.emit(
-                    'status',
-                    {'msg': f'Using Ollama fallback ({", ".join(_ollama_models())}; text-only)'},
-                    room=sid,
-                )
-                try:
-                    out = await _ollama_respond(sid, text)
-                except Exception as e:
-                    await sio.emit('error', {'msg': f'Ollama fallback error: {e}'}, room=sid)
-                    return
+            out = await _text_fallback_chain(sid, text, context="No audio loop")
+            if out is None:
+                return
             await sio.emit('transcription', {'sender': 'JODA', 'text': out})
             await sio.emit('tts_text', {'text': out})
         else:
@@ -1846,37 +1925,9 @@ async def user_input(sid, data):
     if not audio_loop.session:
         # Text-only fallback (Gemini session down)
         if text:
-            if _openai_enabled():
-                await sio.emit(
-                    'status',
-                    {'msg': f'Gemini unavailable; using OpenAI fallback ({_get_openai_model()}; text-only)'},
-                    room=sid,
-                )
-                try:
-                    out = await _openai_respond(sid, text)
-                except Exception as e:
-                    await sio.emit('status', {'msg': f'OpenAI fallback failed; trying Ollama: {e}'}, room=sid)
-                    try:
-                        out = await _ollama_respond(sid, text)
-                        await sio.emit(
-                            'status',
-                            {'msg': f'Using Ollama fallback ({", ".join(_ollama_models())}; text-only)'},
-                            room=sid,
-                        )
-                    except Exception as oe:
-                        await sio.emit('error', {'msg': f'Fallback error (OpenAI+Ollama): {oe}'}, room=sid)
-                        return
-            else:
-                await sio.emit(
-                    'status',
-                    {'msg': f'Gemini unavailable; using Ollama fallback ({", ".join(_ollama_models())}; text-only)'},
-                    room=sid,
-                )
-                try:
-                    out = await _ollama_respond(sid, text)
-                except Exception as e:
-                    await sio.emit('error', {'msg': f'Ollama fallback error: {e}'}, room=sid)
-                    return
+            out = await _text_fallback_chain(sid, text, context="Gemini unavailable")
+            if out is None:
+                return
             await sio.emit('transcription', {'sender': 'JODA', 'text': out})
             await sio.emit('tts_text', {'text': out})
             return
@@ -2056,38 +2107,50 @@ async def iterate_cad(sid, data):
 
 @sio.event
 async def generate_cad(sid, data):
-    # data: { prompt: "make a cube" }
+    # data: { prompt: "make a cube", provider: "build123d" | "tripo" }
     prompt = data.get('prompt')
-    print(f"Received generate_cad request: '{prompt}'")
-    
-    if not audio_loop or not audio_loop.cad_agent:
-        await sio.emit('error', {'msg': "CAD Agent not available"})
-        return
+    provider = data.get('provider', 'build123d')
+    print(f"Received generate_cad request: '{prompt}' (provider={provider})")
 
     try:
-        await sio.emit('status', {'msg': 'Generating new design...'})
-        await sio.emit('cad_status', {'status': 'generating'})
-        
-        # Use generate_prototype based on prompt with project path
-        cad_output_dir = str(audio_loop.project_manager.get_current_project_path() / "cad")
-        result = await audio_loop.cad_agent.generate_prototype(prompt, output_dir=cad_output_dir)
-        
+        cad_output_dir = str(audio_loop.project_manager.get_current_project_path() / "cad") if audio_loop and audio_loop.project_manager else None
+
+        if provider == 'tripo':
+            # Tripo AI generation (returns GLB)
+            from tripo_agent import TripoAgent
+
+            def tripo_status(s):
+                asyncio.create_task(sio.emit('cad_status', s))
+
+            agent = TripoAgent(on_status=tripo_status)
+            await sio.emit('status', {'msg': 'Generating 3D model via Tripo AI...'})
+            await sio.emit('cad_status', {'status': 'generating', 'provider': 'tripo'})
+            result = await agent.generate_model(prompt, output_dir=cad_output_dir)
+        else:
+            # Default: build123d (returns STL)
+            if not audio_loop or not audio_loop.cad_agent:
+                await sio.emit('error', {'msg': "CAD Agent not available"})
+                return
+            await sio.emit('status', {'msg': 'Generating new design...'})
+            await sio.emit('cad_status', {'status': 'generating'})
+            result = await audio_loop.cad_agent.generate_prototype(prompt, output_dir=cad_output_dir)
+
         if result:
-            info = f"{len(result.get('data', ''))} bytes (STL)"
+            fmt = result.get('format', 'stl').upper()
+            info = f"{len(result.get('data', ''))} bytes ({fmt})"
             print(f"Sending newly generated CAD data: {info}")
             await sio.emit('cad_data', result)
 
-
             # Save to Project
-            if 'file_path' in result:
+            if 'file_path' in result and audio_loop and audio_loop.project_manager:
                 saved_path = audio_loop.project_manager.save_cad_artifact(result['file_path'], prompt)
                 if saved_path:
                     print(f"[SERVER] Saved generated CAD to {saved_path}")
 
-            await sio.emit('status', {'msg': 'Design generated'})
+            await sio.emit('status', {'msg': f'Design generated ({fmt})'})
         else:
             await sio.emit('error', {'msg': 'Failed to generate design'})
-            
+
     except Exception as e:
         print(f"Error generating CAD: {e}")
         await sio.emit('error', {'msg': f"Generation Error: {str(e)}"})
@@ -2130,6 +2193,14 @@ async def prompt_web_agent(sid, data):
         await sio.emit('error', {'msg': f"Web Agent Error: {str(e)}"})
 
 @sio.event
+async def mic_sample_rate(sid, data):
+    """Browser tells us the actual AudioContext sample rate before streaming."""
+    sr = data.get("sample_rate") if isinstance(data, dict) else None
+    if sr and isinstance(sr, (int, float)) and sr > 0:
+        _mic_sample_rates[sid] = int(sr)
+        print(f"[SERVER] mic_sample_rate from {sid}: {int(sr)} Hz")
+
+@sio.event
 async def mic_audio_chunk(sid, data):
     """
     Receives raw PCM s16le audio chunks from the web client and forwards them into the Gemini Live session.
@@ -2148,7 +2219,8 @@ async def mic_audio_chunk(sid, data):
                     sr = data.get("sample_rate")
                 print(
                     f"[SERVER] mic_audio_chunk first packet: type={dtype} len={dlen} "
-                    f"sample_rate={sr} external={getattr(audio_loop, 'use_external_audio', None)} "
+                    f"sample_rate={sr} stored_sr={_mic_sample_rates.get(sid)} "
+                    f"external={getattr(audio_loop, 'use_external_audio', None)} "
                     f"paused={getattr(audio_loop, 'paused', None)}"
                 )
             except Exception:
@@ -2167,13 +2239,16 @@ async def mic_audio_chunk(sid, data):
                     print(f"[SERVER] mic_audio_chunk resample failed (sr={sample_rate}): {e}")
             audio_loop.feed_external_audio(pcm)
 
+        # Look up stored sample rate for raw binary payloads (Safari sends raw ArrayBuffer).
+        stored_sr = _mic_sample_rates.get(sid)
+
         # python-socketio delivers binary payloads as `bytes`.
         if isinstance(data, (bytes, bytearray)):
-            _feed(bytes(data), None)
+            _feed(bytes(data), stored_sr)
             return
 
         if isinstance(data, memoryview):
-            _feed(data.tobytes(), None)
+            _feed(data.tobytes(), stored_sr)
             return
 
         # Fallback: { data: <bytes> }

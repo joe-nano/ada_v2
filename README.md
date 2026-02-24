@@ -1,580 +1,543 @@
-# J.O.D.A V2 - Jarvis's Operative Developer Assistant
+<p align="center">
+  <img src="public/joda-banner.png" alt="JODA" width="600" />
+</p>
 
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11-blue?logo=python)
-![React](https://img.shields.io/badge/React-18.2-61DAFB?logo=react)
-![Electron](https://img.shields.io/badge/Electron-28-47848F?logo=electron)
-![Gemini](https://img.shields.io/badge/Google%20Gemini-Native%20Audio-4285F4?logo=google)
-![License](https://img.shields.io/badge/License-MIT-green)
+<h1 align="center">J.O.D.A</h1>
+<p align="center"><strong>Jarvis's Operative Developer Assistant</strong></p>
 
-> **J.O.D.A** = **J**arvis's **O**perative **D**eveloper **A**ssistant
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11+-blue?logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black" />
+  <img src="https://img.shields.io/badge/Three.js-r160-black?logo=threedotjs" />
+  <img src="https://img.shields.io/badge/WebXR-Supported-ff69b4" />
+  <img src="https://img.shields.io/badge/Gemini-2.5_Live-4285F4?logo=google&logoColor=white" />
+  <img src="https://img.shields.io/badge/License-MIT-green" />
+</p>
 
-JODA V2 is a sophisticated male AI companion and developer assistant designed to manage and orchestrate all projects in the biz_automate ecosystem. He combines Google's Gemini 2.5 Native Audio with computer vision, gesture control, 3D CAD generation, and autonomous agent deployment capabilities in an Electron desktop application.
-
----
-
-## 🌟 Capabilities at a Glance
-
-| Feature | Description | Technology |
-|---------|-------------|------------|
-| **🤖 Ecosystem Orchestration** | Deploy and manage named agents across biz_automate projects | Custom Agent Framework |
-| **📊 Agent Feedback System** | Receive real-time status and performance reports from agents | WebSocket + Event Streaming |
-| **🗣️ Low-Latency Voice** | Real-time conversation with interrupt handling | Gemini 2.5 Native Audio |
-| **🧊 Parametric CAD** | Editable 3D model generation from voice prompts | `build123d` → STL |
-| **🖨️ 3D Printing** | Slicing and wireless print job submission | OrcaSlicer + Moonraker/OctoPrint |
-| **🖐️ Minority Report UI** | Gesture-controlled window manipulation | MediaPipe Hand Tracking |
-| **👁️ Face Authentication** | Secure local biometric login | MediaPipe Face Landmarker |
-| **🌐 Web Agent** | Autonomous browser automation | Playwright + Chromium |
-| **🏠 Smart Home** | Voice control for TP-Link Kasa devices | `python-kasa` |
-| **📁 Project Memory** | Persistent context across sessions | File-based JSON storage |
-
-### 🖐️ Gesture Control Details
-
-JODA's "Minority Report" interface uses your webcam to detect hand gestures:
-
-| Gesture | Action |
-|---------|--------|
-| 🤏 **Pinch** | Confirm action / click |
-| ✋ **Open Palm** | Release the window |
-| ✊ **Close Fist** | "Select" and grab a UI window to drag it |
-
-> **Tip**: Enable the video feed window to see the hand tracking overlay.
+<p align="center">
+  A voice-first AI assistant that lives in a spatial 3D world.<br/>
+  Talk to it. Ask it to design parts. Print them. Control your lights. Browse the web. Deploy agents.<br/>
+  All from inside a holographic workspace you can walk into with a VR headset.
+</p>
 
 ---
 
-## 🤖 Agent Deployment & Ecosystem Management
+## The Origin Story
 
-JODA's **primary mission** is to serve as the central orchestrator for all projects in the `biz_automate` ecosystem. He can deploy, manage, and monitor specialized agents across multiple trading bots, automation scripts, and development workflows.
+Depending on who you ask, JODA came into existence three different ways. All of them are true.
 
-### Agent Deployment Capabilities
+### The Engineer's Account
 
-**Named Agent Types**:
-- **Trading Strategy Agents** - Manage Freqtrade/Hummingbot instances, execute strategies
-- **Data Collection Agents** - Fetch market data, monitor APIs, track events
-- **Arbitrage Monitoring Agents** - Scan cross-chain opportunities in real-time
-- **Training Agents** - Retrain RL models, optimize hyperparameters
-- **System Monitoring Agents** - Track resource usage, detect anomalies, log errors
-- **Workflow Coordination Agents** - Orchestrate multi-step processes across projects
+It started with **ADA** — a Gemini-powered voice assistant built to do one thing well: listen and respond in real time using Google's native audio API. ADA worked. You could talk to it, and it would talk back with sub-second latency. It could generate images, write files, and control smart devices.
 
-### Feedback & Reporting System
+But ADA lived in a flat world. A 2D split-screen layout where an avatar sat on the left and chat sat on the right. Every new feature — CAD viewer, printer controls, browser automation — became another panel fighting for screen space. The interface was becoming a dashboard, not an experience.
 
-Each deployed agent communicates back to JODA with:
-- ✅ **Status Updates** - Running, idle, error, completed states
-- 📊 **Performance Metrics** - Profit/loss, execution time, accuracy scores
-- 🚨 **Error Logs** - Stack traces, debugging information, retry attempts
-- 🎯 **Completion Signals** - Task results, generated artifacts, final outputs
+Then came **OpenClaw**. A multi-agent framework built around a radical idea: AI assistants shouldn't be monoliths. They should be ecosystems — collections of specialized agents that discover each other, share tools, and coordinate through protocols like MCP. OpenClaw showed that a single assistant could orchestrate a fleet of capabilities without becoming a tangled mess.
 
-### Voice Commands for Agent Management
+The rewrite happened in a weekend. ADA's voice engine was transplanted into a full-screen React Three Fiber canvas. Panels became spatial objects floating in 3D space. The avatar became a holographic entity you could walk around. WebXR support meant the whole thing could run in a VR headset. The 2D dashboard became a 3D workspace.
 
-```
-"Deploy a Freqtrade monitoring agent for BTC/USDT on Binance"
-"Show me all active agents and their status"
-"Check the performance of the arbitrage agent"
-"Restart the RL training agent with new parameters"
-"Create a consolidated report from all trading agents"
-"Pause all agents and save their state"
-```
+ADA became JODA. The voice was reborn in three dimensions.
 
-### Integration with biz_automate Projects
+### The Sci-Fi Version
 
-JODA orchestrates:
-- **Freqtrade** (`/root/Desktop/biz_automate/freqtrade`) - Deploy strategies, monitor trades
-- **Hummingbot** (`/root/Desktop/biz_automate/hummingbot`) - Manage connectors, coordinate market-making
-- **RL Trading Bot** (`/root/Desktop/biz_automate/reinforcement_learning_trading_bot`) - Trigger training, deploy models
-- **Arbitrage Bots** (`/root/Desktop/biz_automate/multiple_bizstreams_and_automations`) - Monitor opportunities, execute trades
-- **n8n Workflows** (`/root/Desktop/biz_automate/n8n_automations`) - Trigger automations, schedule tasks
+A developer sits at their desk, talking to an AI that floats in a holographic workspace. They say "design me a gear with 24 teeth" and watch geometry materialize in the air. They say "print it" and a machine across the room starts humming. They say "dim the lights" and the room goes dark except for the glow of the avatar.
+
+It's Iron Man's JARVIS meets the holodeck — except it runs on a laptop with a $20/month API key. Born from the ashes of a simpler assistant called ADA, rebuilt from the ground up for spatial computing.
+
+### The Mythic Version
+
+> "Do, or do not. There is no try."
+
+JODA is the wise guide through a developer's digital universe. It doesn't just answer questions — it shapes matter, commands machines, and orchestrates agents across networks. Ancient wisdom encoded in neon geometry. A master that teaches by doing.
+
+The name is not a coincidence.
+
+### Credits
+
+JODA stands on the shoulders of two projects:
+
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — the lobster that showed us AI assistants belong everywhere. Its multi-agent architecture and MCP-first philosophy shaped how JODA orchestrates tools, agents, and external services.
+- **[ADA](https://github.com/nazirlouis/ada_v2)** — where the voice was born. ADA's Gemini Live audio engine is the beating heart of JODA's real-time conversation system.
 
 ---
 
-## 🏗️ Architecture Overview
+## Capabilities at a Glance
 
-```mermaid
-graph TB
-    subgraph Frontend ["Frontend (Electron + React)"]
-        UI[React UI]
-        THREE[Three.js 3D Viewer]
-        GESTURE[MediaPipe Gestures]
-        SOCKET_C[Socket.IO Client]
-    end
-    
-    subgraph Backend ["Backend (Python 3.11 + FastAPI)"]
-        SERVER[server.py<br/>Socket.IO Server]
-        JODA[joda.py<br/>Gemini Live API]
-        WEB[web_agent.py<br/>Playwright Browser]
-        CAD[cad_agent.py<br/>CAD + build123d]
-        PRINTER[printer_agent.py<br/>3D Printing + OrcaSlicer]
-        KASA[kasa_agent.py<br/>Smart Home]
-        AUTH[authenticator.py<br/>MediaPipe Face Auth]
-        PM[project_manager.py<br/>Project Context]
-    end
-
-    UI --> SOCKET_C
-    SOCKET_C <--> SERVER
-    SERVER --> JODA
-    JODA --> WEB
-    JODA --> CAD
-    JODA --> KASA
-    SERVER --> AUTH
-    SERVER --> PM
-    SERVER --> PRINTER
-    CAD -->|STL file| THREE
-    CAD -->|STL file| PRINTER
-```
+| Category | Feature | Details |
+|----------|---------|---------|
+| **Voice** | Real-time conversation | Gemini 2.5 Live API, sub-second latency, interrupt support |
+| **Voice** | Browser mic input | 16kHz PCM streaming from any device |
+| **3D World** | Spatial panels | 8 floating panels in 3D space (chat, tools, CAD, browser, etc.) |
+| **3D World** | Avatar system | 4 modes: beautiful GLB, full-body GLB, procedural 3D, holographic SVG |
+| **3D World** | WebXR | Walk into the workspace with VR/AR headsets |
+| **CAD** | Parametric design | Natural language → build123d → STL via `cad_agent.py` |
+| **CAD** | Iterative refinement | "Make it thicker" — modifies existing designs |
+| **Printing** | Network discovery | Auto-detect OctoPrint/Klipper/Bambu printers |
+| **Printing** | Slice & print | OrcaSlicer profiles → direct print |
+| **Smart Home** | Kasa devices | Discover, toggle, dim, change color of TP-Link devices |
+| **Browser** | Web automation | Playwright-based browsing, screenshots, form filling |
+| **Agents** | Agent deployment | FreqTrade, Hummingbot, RL trading, arbitrage, data collectors |
+| **Agents** | MCP integration | Discover and call tools from MCP servers |
+| **Scheduler** | Recurring tasks | Cron or interval-based job scheduling |
+| **Auth** | Face recognition | MediaPipe-based local face auth (never uploaded) |
+| **Media** | Image/video generation | AI-powered content creation |
+| **Files** | Read/write | File system access with confirmation prompts |
+| **Memory** | Conversation persistence | Save/load long-term memory contexts |
 
 ---
 
-## ⚡ TL;DR Quick Start (Experienced Developers)
+## Screenshots / Demo
 
-<details>
-<summary>Click to expand quick setup commands</summary>
+> *Screenshots coming soon. In the meantime, run `npm run dev` and see for yourself.*
+
+---
+
+## Quick Start
 
 ```bash
-# 1. Clone and enter
-git clone https://github.com/nazirlouis/joda_v2.git && cd joda_v2
+# Clone
+git clone https://github.com/nazirlouis/joda_ai_local.git
+cd joda_ai_local
 
-# 2. Create Python environment (Python 3.11)
-conda create -n joda_v2 python=3.11 -y && conda activate joda_v2
-brew install portaudio  # macOS only (for PyAudio)
-pip install -r requirements.txt
-playwright install chromium
+# Environment
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY (required) and optional keys
 
-# 3. Setup frontend
+# Install
 npm install
-
-# 4. Create .env file
-echo "GEMINI_API_KEY=your_key_here" > .env
-
-# 5. Run!
-conda activate joda_v2 && npm run dev
-```
-
-</details>
-
----
-
-## HTTPS on a VPS (recommended for mic/camera)
-
-Browsers typically require a **secure context** for microphone/camera (`navigator.mediaDevices`). For a VPS URL like `http://72.62.165.102:5173`, that means you need **HTTPS**.
-
-Important: you generally can’t get a trusted certificate for a raw IP address. Use a domain:
-- Create a DNS `A` record (e.g. `joda.yourdomain.com`) → `72.62.165.102`
-
-### Option A: Caddy (Docker) reverse proxy (recommended)
-
-From `joda_ai/` on the VPS:
-
-1) Copy deploy files and set your domain:
-- Edit `deploy/Caddyfile` and replace `joda.example.com` with your domain.
-
-2) Start Caddy:
-```bash
-cd deploy
-docker compose -f docker-compose.caddy.yml up -d
-```
-
-3) Run JODA so it binds locally (recommended):
-- Start backend on `127.0.0.1:8765`
-- Start frontend on `127.0.0.1:5173`
-
-Then open:
-- `https://joda.yourdomain.com`
-
-### Option B: Nginx (manual)
-
-If you prefer Nginx + Certbot, tell me your distro and domain and I’ll generate an exact config.
-
----
-
-## 🛠️ Installation Requirements
-
-### 🆕 Absolute Beginner Setup (Start Here)
-If you have never coded before, follow these steps first!
-
-**Step 1: Install Visual Studio Code (The Editor)**
-- Download and install [VS Code](https://code.visualstudio.com/). This is where you will write code and run commands.
-
-**Step 2: Install Anaconda (The Manager)**
-- Download [Miniconda](https://docs.conda.io/en/latest/miniconda.html) (a lightweight version of Anaconda).
-- This tool allows us to create isolated "playgrounds" (environments) for our code so different projects don't break each other.
-- **Windows Users**: During install, check "Add Anaconda to my PATH environment variable" (even if it says not recommended, it makes things easier for beginners).
-
-**Step 3: Install Git (The Downloader)**
-- **Windows**: Download [Git for Windows](https://git-scm.com/download/win).
-- **Mac**: Open the "Terminal" app (Cmd+Space, type Terminal) and type `git`. If not installed, it will ask to install developer tools—say yes.
-
-**Step 4: Get the Code**
-1. Open your terminal (or Command Prompt on Windows).
-2. Type this command and hit Enter:
-   ```bash
-   git clone https://github.com/nazirlouis/joda_v2.git
-   ```
-3. This creates a folder named `joda_v2`.
-
-**Step 5: Open in VS Code**
-1. Open VS Code.
-2. Go to **File > Open Folder**.
-3. Select the `joda_v2` folder you just downloaded.
-4. Open the internal terminal: Press `Ctrl + ~` (tilde) or go to **Terminal > New Terminal**.
-
----
-
-### ⚠️ Technical Prerequisites
-Once you have the basics above, continue here.
-
-### 1. System Dependencies
-
-**MacOS:**
-```bash
-# Audio Input/Output support (PyAudio)
-brew install portaudio
-```
-
-**Windows:**
-- No additional system dependencies required!
-
-### 2. Python Environment
-Create a single Python 3.11 environment:
-
-```bash
-conda create -n joda_v2 python=3.11
-conda activate joda_v2
-
-# Install all dependencies
 pip install -r requirements.txt
 
-# Install Playwright browsers
-playwright install chromium
-```
-
-### 3. Frontend Setup
-Requires **Node.js 18+** and **npm**. Download from [nodejs.org](https://nodejs.org/) if not installed.
-
-```bash
-# Verify Node is installed
-node --version  # Should show v18.x or higher
-
-# Install frontend dependencies
-npm install
-```
-
-### 4. 🔐 Face Authentication Setup
-To use the secure voice features, JODA needs to know what you look like.
-
-1. Take a clear photo of your face (or use an existing one).
-2. Rename the file to `reference.jpg`.
-3. Drag and drop this file into the `joda_v2/backend` folder.
-4. (Optional) You can toggle this feature on/off in `settings.json` by changing `"face_auth_enabled": true/false`.
-
----
-
-## ⚙️ Configuration (`settings.json`)
-
-The system creates a `settings.json` file on first run. You can modify this to change behavior:
-
-| Key | Type | Description |
-| :--- | :--- | :--- |
-| `face_auth_enabled` | `bool` | If `true`, blocks all AI interaction until your face is recognized via the camera. |
-| `tool_permissions` | `obj` | Controls manual approval for specific tools. |
-| `tool_permissions.generate_cad` | `bool` | If `true`, requires you to click "Confirm" on the UI before generating CAD. |
-| `tool_permissions.run_web_agent` | `bool` | If `true`, requires confirmation before opening the browser agent. |
-| `tool_permissions.write_file` | `bool` | **Critical**: Requires confirmation before the AI writes code/files to disk. |
-
----
-
-### 5. 🖨️ 3D Printer Setup
-JODA V2 can slice STL files and send them directly to your 3D printer.
-
-**Supported Hardware:**
-- **Klipper/Moonraker** (Creality K1, Voron, etc.)
-- **OctoPrint** instances
-- **PrusaLink** (Experimental)
-
-**Step 1: Install Slicer**
-JODA uses **OrcaSlicer** (recommended) or PrusaSlicer to generate G-code.
-1. Download and install [OrcaSlicer](https://github.com/SoftFever/OrcaSlicer).
-2. Run it once to ensure profiles are created.
-3. JODA automatically detects the installation path.
-
-**Step 2: Connect Printer**
-1. Ensure your printer and computer are on the **same Wi-Fi network**.
-2. Open the **Printer Window** in JODA (Cube icon).
-3. JODA automatically scans for printers using mDNS.
-4. **Manual Connection**: If your printer isn't found, use the "Add Printer" button and enter the IP address (e.g., `192.168.1.50`).
-
----
-
-### 6. 🔑 Gemini API Key Setup
-JODA uses Google's Gemini API for voice and intelligence. You need a free API key.
-
-1. Go to [Google AI Studio](https://aistudio.google.com/app/apikey).
-2. Sign in with your Google account.
-3. Click **"Create API Key"** and copy the generated key.
-4. Create a file named `.env` in the `joda_v2` folder (same level as `README.md`).
-5. Add this line to the file:
-   ```
-   GEMINI_API_KEY=your_api_key_here
-   ```
-6. Replace `your_api_key_here` with the key you copied.
-
-> **Note**: Keep this key private! Never commit your `.env` file to Git.
-
----
-
-## 🚀 Running JODA V2
-
-You have two options to run the app. Ensure your `joda_v2` environment is active!
-
-### Option 1: The "Easy" Way (Single Terminal)
-The app is smart enough to start the backend for you.
-1. Open your terminal in the `joda_v2` folder.
-2. Activate your environment: `conda activate joda_v2`
-3. Run:
-   ```bash
-   npm run dev
-   ```
-4. The backend will start automatically in the background.
-
-### Option 2: The "Developer" Way (Two Terminals)
-Use this if you want to see the Python logs (recommended for debugging).
-
-**Terminal 1 (Backend):**
-```bash
-conda activate joda_v2
-python backend/server.py
-```
-
-**Terminal 2 (Frontend):**
-```bash
-# Environment doesn't matter here, but keep it simple
+# Run (starts both frontend + backend)
 npm run dev
 ```
 
----
-
-## ✅ First Flight Checklist (Things to Test)
-
-1. **Voice Check**: Say "Hello Joda". He should respond.
-2. **Vision Check**: Look at the camera. If Face Auth is on, the lock screen should unlock.
-3. **CAD Check**: Open the CAD window and say "Create a cube". Watch the logs.
-4. **Web Check**: Open the Browser window and say "Go to Google".
-5. **Smart Home**: If you have Kasa devices, say "Turn on the lights".
-6. **Agent Deployment**: JODA can deploy named agents to manage biz_automate projects and receive progress reports.
+Open `http://localhost:5173` in your browser. Click the microphone to start talking.
 
 ---
 
-## ▶️ Commands & Tools Reference
+## Architecture Overview
 
-### 🤖 Ecosystem & Agent Management
-- "Deploy a [AgentType] agent for [Task]"
-- "Show status of all running agents"
-- "Check performance of [ProjectName]"
-- "Restart the [AgentName] agent"
-- "Generate a report on [Project/Agent]"
-- "Monitor [ProjectName] for errors"
-- "Coordinate [Project1] and [Project2] workflows"
+```mermaid
+graph TB
+    subgraph Browser["Browser / WebXR Headset"]
+        App[App.jsx]
+        SW[SpatialWorld.jsx<br/>R3F Canvas]
+        SP[SpatialPanel.jsx<br/>8 floating panels]
+        AS[AvatarSwitch.jsx<br/>4 avatar modes]
+        AC[AvatarController.jsx]
+        XR[XR Store<br/>VR/AR entry]
+        XRP[XRPanel.jsx<br/>UIKit panels]
 
-### 🗣️ Voice Commands
-- "Switch project to [Name]"
-- "Create a new project called [Name]"
-- "Turn on the [Room] light"
-- "Make the light [Color]"
-- "Pause audio" / "Stop audio"
+        App --> SW
+        SW --> SP
+        SW --> AS
+        SW --> AC
+        SW --> XR
+        XR --> XRP
+    end
 
-### 🗓️ Scheduler (Recurring Automations)
-JODA can run recurring automation prompts (e.g., “daily trend ad refresh”) via a simple built-in scheduler.
+    subgraph SocketIO["Socket.IO (port 8765)"]
+        SIO[Real-time Events<br/>Audio + Commands + State]
+    end
 
-- Stored at: `$JODA_PROJECT_ROOT/.joda/scheduler/jobs.json`
-- Job types:
-  - `browse`: runs the `/browse` agent (browser task agent)
-  - `web`: runs the built-in web agent
-  - `mcp`: triggers an MCP tool call (e.g., Notion/Zapier/n8n once wired)
-  - `pipeline`: runs a built-in pipeline (currently: `daily_ads`)
-- Commands:
-  - Type `/scheduler` to list jobs
-  - Type `/schedule ...` to create/manage jobs from chat
-  - Ask JODA to create jobs using the `create_schedule` tool (Gemini tool calling)
+    subgraph Backend["Python Backend"]
+        SRV[server.py<br/>FastAPI + Socket.IO]
+        JODA[joda.py<br/>Gemini 2.5 Live]
+        TOOLS[tools.py<br/>6 Gemini tools]
 
-Notes:
-- For login/form automation, store credentials in Settings (memory-only) and use `{{USERNAME}}/{{PASSWORD}}` placeholders.
-- For social posting, prefer OAuth-based integrations via MCP (Zapier/Notion/etc) rather than password-based browser automation.
+        CAD[cad_agent.py<br/>build123d → STL]
+        PRT[printer_agent.py<br/>OrcaSlicer + printers]
+        WEB[web_agent.py<br/>Playwright browser]
+        KASA[kasa_agent.py<br/>Smart home]
+        AUTH[authenticator.py<br/>MediaPipe face]
+        MCP[mcp_client.py<br/>MCP protocol]
+        AGT[agent_manager.py<br/>Agent orchestration]
+        SCH[scheduler_store.py<br/>Recurring jobs]
 
-### 📣 Daily Ads Pipeline (`pipeline: daily_ads`)
-The built-in `daily_ads` pipeline does:
-1. Pulls daily trends from public sources (Google Trends RSS, Reddit Popular, Hacker News).
-2. Builds a “Daily Ad Refresh Brief”.
-3. Sends the brief to automation via `N8N_WEBHOOK_URL` and/or `ZAPIER_WEBHOOK_URL` (your workflow can return `creatives`).
-4. If `creatives` are returned, generates image variants using NanoBanana Pro (`NANOBANANA_PRO_MODEL`) and sends them back for posting.
+        SRV --> JODA
+        JODA --> TOOLS
+        SRV --> CAD
+        SRV --> PRT
+        SRV --> WEB
+        SRV --> KASA
+        SRV --> AUTH
+        SRV --> MCP
+        SRV --> AGT
+        SRV --> SCH
+    end
 
-Create a daily job from chat:
-- `/schedule cron "0 9 * * *" pipeline Daily Ads ::`
-
-### 🤖 Agent Zero (Docker)
-JODA can manage Agent Zero instances via Docker (recommended for isolation and scaling).
-
-- Image: `AGENT_ZERO_IMAGE` (default: `agent0ai/agent-zero`)
-- Default port: `AGENT_ZERO_BASE_PORT` (default: `50001`) mapped to container port `80`
-- Start (manual):
-  - `docker pull agent0ai/agent-zero`
-  - `docker run -p 50001:80 agent0ai/agent-zero`
-- In JODA (requires `/expert on` + confirmation):
-  - Use `agent_zero_pull`, `agent_zero_start`, `agent_zero_list`, `agent_zero_stop`, `agent_zero_scale`
-  - Or type `/agent0` to see shortcuts
-
-### 🧊 3D CAD
-- **Prompt**: "Create a 3D model of a hex bolt."
-- **Iterate**: "Make the head thinner." (Requires previous context)
-- **Files**: Saves to `projects/[ProjectName]/output.stl`.
-
-### 🌐 Web Agent
-- **Prompt**: "Go to Amazon and find a USB-C cable under $10."
-- **Note**: The agent will auto-scroll, click, and type. Do not interfere with the browser window while it runs.
-
-### 🌐 Browser Task Agent (`/browse`)
-- **Prompt**: "Open docs.browser-use.com and summarize the quickstart."
-- **Note**: `/browse` uses a wrapper that can integrate with `browser-use` (https://docs.browser-use.com/quickstart). If `browser_use` is not installed/configured, it falls back to the built-in Playwright web agent.
-- **Config**: `BROWSER_USE_PROVIDER=openai` + `BROWSER_USE_OPENAI_MODEL=gpt-o3` (optional; see `.env.example`).
-- **Skills**: JODA supports local reusable `/browse` “skills” (prompt templates) inspired by browser-use Skills. Use `save_browser_skill`/`list_browser_skills` tools (or type `/skills`) to manage them; matching skills are auto-injected into `/browse` runs.
-
-### 🖨️ Printing & Slicing
-- **Auto-Discovery**: JODA automatically finds printers on your network.
-- **Slicing**: Click "Slice & Print" on any generated 3D model.
-- **Profiles**: JODA intelligently selects the correct OrcaSlicer profile based on your printer's name (e.g., "Creality K1").
-
----
-
-## ❓ Troubleshooting FAQ
-
-### Camera not working / Permission denied (Mac)
-**Symptoms**: Error about camera access, or video feed shows black.
-
-**Solution**:
-1. Go to **System Preferences > Privacy & Security > Camera**.
-2. Ensure your terminal app (e.g., Terminal, iTerm, VS Code) has camera access enabled.
-3. Restart the app after granting permission.
-
----
-
-### `GEMINI_API_KEY` not found / Authentication Error
-**Symptoms**: Backend crashes on startup with "API key not found".
-
-**Solution**:
-1. Make sure your `.env` file is in the root `joda_v2` folder (not inside `backend/`).
-2. Verify the format is exactly: `GEMINI_API_KEY=your_key` (no quotes, no spaces).
-3. Restart the backend after editing the file.
-
----
-
-### Fallback Model Order (When Gemini Is Unavailable)
-
-JODA falls back in this order:
-1. **OpenAI** (`OPENAI_API_KEY`) using `OPENAI_MODEL` (default: `gpt-5`)
-2. **Local Ollama** (`OLLAMA_BASE_URL` + `OLLAMA_MODELS`)
-
----
-
-### WebSocket connection errors (1011)
-**Symptoms**: `websockets.exceptions.ConnectionClosedError: 1011 (internal error)`.
-
-**Solution**:
-This is a server-side issue from the Gemini API. Simply reconnect by clicking the connect button or saying "Hello Joda" again. If it persists, check your internet connection or try again later.
-
----
-
-## 📸 What It Looks Like
-
-*Coming soon! Screenshots and demo videos will be added here.*
-
----
-
-## 📂 Project Structure
-
-```
-joda_v2/
-├── backend/                    # Python server & AI logic
-│   ├── joda.py                 # Gemini Live API integration
-│   ├── server.py               # FastAPI + Socket.IO server
-│   ├── cad_agent.py            # CAD generation orchestrator
-│   ├── printer_agent.py        # 3D printer discovery & slicing
-│   ├── web_agent.py            # Playwright browser automation
-│   ├── kasa_agent.py           # TP-Link smart home control
-│   ├── authenticator.py        # MediaPipe face auth logic
-│   ├── project_manager.py      # Project context management
-│   ├── tools.py                # Tool definitions for Gemini
-│   └── reference.jpg           # Your face photo (add this!)
-├── src/                        # React frontend
-│   ├── App.jsx                 # Main application component
-│   ├── components/             # UI components (11 files)
-│   └── index.css               # Global styles
-├── electron/                   # Electron main process
-│   └── main.js                 # Window & IPC setup
-├── projects/                   # User project data (auto-created)
-├── .env                        # API keys (create this!)
-├── requirements.txt            # Python dependencies
-├── package.json                # Node.js dependencies
-└── README.md                   # You are here!
+    Browser <--> SocketIO
+    SocketIO <--> Backend
 ```
 
----
+**Key architectural decisions:**
 
-## ⚠️ Known Limitations
-
-| Limitation | Details |
-|------------|---------|
-| **macOS & Windows** | Tested on macOS 14+ and Windows 10/11. Linux is untested. |
-| **Camera Required** | Face auth and gesture control need a working webcam. |
-| **Gemini API Quota** | Free tier has rate limits; heavy CAD iteration may hit limits. |
-| **Network Dependency** | Requires internet for Gemini API (no offline mode). |
-| **Single User** | Face auth recognizes one person (the `reference.jpg`). |
+- **Single R3F Canvas**: The entire UI lives inside one `<Canvas>` — no nested Canvas conflicts. CadWindow is the one exception (2D overlay).
+- **Ref-based audio bridge**: Avatar audio data flows through refs (not state) at 30-60Hz to avoid re-renders. `RefBridge` in AvatarSwitch scopes state updates to the avatar subtree only.
+- **Spatial positions**: Each panel's 3D position is stored in `spatialPositions` state with defaults from `DEFAULT_POSITIONS`.
+- **AI model fallback**: Gemini → OpenAI (gpt-5) → Ollama local.
 
 ---
 
-## 🤝 Contributing
+## WebXR Support
 
-Contributions are welcome! Here's how:
+JODA's spatial world is WebXR-ready. Put on a headset and walk into your workspace.
 
-1. **Fork** the repository.
-2. **Create a branch**: `git checkout -b feature/amazing-feature`
-3. **Commit** your changes: `git commit -m 'Add amazing feature'`
-4. **Push** to the branch: `git push origin feature/amazing-feature`
-5. **Open a Pull Request** with a clear description.
+### Supported Headsets
 
-### Development Tips
+| Headset | Mode | Status |
+|---------|------|--------|
+| Apple Vision Pro | AR (passthrough) | Supported |
+| Meta Quest 3/Pro | VR + AR | Supported |
+| XReal Air | AR | Experimental |
+| Any WebXR browser | VR | Supported |
 
-- Run the backend separately (`python backend/server.py`) to see Python logs.
-- Use `npm run dev` without Electron during frontend development (faster reload).
-- The `projects/` folder contains user data—don't commit it to Git.
+### How It Works
 
----
+JODA uses a dual-path rendering strategy:
 
-## 🔒 Security Considerations
+- **Desktop**: Panels render as `drei Html` components anchored to 3D positions
+- **WebXR**: Panels switch to `@react-three/uikit` native XR rendering via `XRPanel.jsx`
 
-| Aspect | Implementation |
-|--------|----------------|
-| **API Keys** | Stored in `.env`, never committed to Git. |
-| **Face Data** | Processed locally, never uploaded. |
-| **Tool Confirmations** | Write/CAD/Web actions can require user approval. |
-| **No Cloud Storage** | All project data stays on your machine. |
+The `xrStore.js` manages XR session state. Entry buttons (VR/AR) appear in the toolbar when WebXR is available.
 
-> [!WARNING]
-> Never share your `.env` file or `reference.jpg`. These contain sensitive credentials and biometric data.
+### V1 (Current)
 
----
+- Immersive VR/AR session entry
+- Life-sized avatar placement (`XRAvatarPlacement`)
+- Controller and hand tracking input
+- Spatial panels visible in XR
 
-## 🙏 Acknowledgments
+### V2 (Planned)
 
-- **[Google Gemini](https://deepmind.google/technologies/gemini/)** — Native Audio API for real-time voice
-- **[build123d](https://github.com/gumyr/build123d)** — Modern parametric CAD library
-- **[MediaPipe](https://developers.google.com/mediapipe)** — Hand tracking, gesture recognition, and face authentication
-- **[Playwright](https://playwright.dev/)** — Reliable browser automation
+- Hand gesture commands (pinch to confirm, wave to cancel)
+- Gaze-based panel interaction
+- Room-scale panel anchoring
+- Shared multi-user sessions
 
 ---
 
-## 📄 License
+## Installation
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+### Prerequisites
+
+- **Node.js** 18+ and npm
+- **Python** 3.11+
+- **Gemini API key** (required for voice) — get one at [aistudio.google.com](https://aistudio.google.com)
+
+### Beginner Path
+
+```bash
+git clone https://github.com/nazirlouis/joda_ai_local.git
+cd joda_ai_local
+cp .env.example .env
+# Add your GEMINI_API_KEY to .env
+
+npm install
+pip install -r requirements.txt
+npm run dev
+```
+
+### Developer Path
+
+```bash
+git clone https://github.com/nazirlouis/joda_ai_local.git
+cd joda_ai_local
+
+# Python environment
+python -m venv venv
+source venv/bin/activate  # or venv\Scripts\activate on Windows
+pip install -r requirements.txt
+
+# Frontend
+npm install
+
+# Configuration
+cp .env.example .env
+# Edit .env — see Configuration section below
+
+# Run with hot reload
+npm run dev
+```
+
+### Optional Dependencies
+
+| Dependency | Purpose | Install |
+|------------|---------|---------|
+| OrcaSlicer | 3D print slicing | [Download](https://github.com/SoftFever/OrcaSlicer) |
+| build123d | CAD generation | `pip install build123d` |
+| Playwright | Web automation | `pip install playwright && playwright install` |
+| python-kasa | Smart home | `pip install python-kasa` |
+| MediaPipe | Face auth + gestures | Included in requirements.txt |
 
 ---
 
-<p align="center">
-  <strong>Built with 🤖 by Nazir Louis</strong><br>
-  <em>Bridging AI, CAD, and Vision in a Single Interface</em>
-</p>
+## Configuration
+
+### Environment Variables (.env)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GEMINI_API_KEY` | Yes | Google Gemini API key |
+| `OPENAI_API_KEY` | No | OpenAI fallback key |
+| `OLLAMA_HOST` | No | Ollama server URL (default: `http://localhost:11434`) |
+| `FAL_KEY` | No | Fal.ai key for image/video generation |
+| `HEYGEN_API_KEY` | No | HeyGen avatar streaming |
+| `JUDGE0_API_KEY` | No | Code execution service |
+| `LIVEKIT_URL` | No | LiveKit server for WebRTC |
+| `LIVEKIT_API_KEY` | No | LiveKit API key |
+| `LIVEKIT_API_SECRET` | No | LiveKit secret |
+
+### Settings (backend/settings.json)
+
+Runtime settings are stored in `backend/settings.json` and can be modified through the Settings panel or via Socket.IO:
+
+- `tool_permissions` — Per-tool auto-allow/deny/ask
+- `face_auth_enabled` — Enable face authentication
+- `camera_flipped` — Mirror camera feed
+
+---
+
+## Running JODA
+
+### Development Mode
+
+```bash
+npm run dev
+```
+
+This starts both the Vite dev server (port 5173) and the Python backend (port 8765) using `concurrently`.
+
+### Production Build
+
+```bash
+npm run build
+# Serve dist/ with any static server
+# Run backend separately: python backend/server.py
+```
+
+### Remote Access (HTTPS Required for Mic)
+
+Browser microphone access requires HTTPS. For remote/VPS deployments:
+
+**Option 1: Cloudflare Tunnel**
+```bash
+cloudflared tunnel --url http://localhost:5173
+```
+
+**Option 2: nginx reverse proxy with SSL**
+```nginx
+server {
+    listen 443 ssl;
+    server_name joda.yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:5173;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location /socket.io/ {
+        proxy_pass http://localhost:8765;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}
+```
+
+---
+
+## Commands & Tools
+
+### Voice Commands
+
+Speak naturally — JODA understands intent, not keywords. Examples:
+
+- "Design a spur gear with 24 teeth and module 2"
+- "Print the last model on the Bambu printer"
+- "Turn off the living room lights"
+- "Open YouTube and search for Three.js tutorials"
+- "Deploy a FreqTrade bot for BTC/USDT"
+- "Schedule a daily report at 9am"
+
+### Slash Commands (Text Input)
+
+| Command | Description |
+|---------|-------------|
+| `/projects` | List and manage JODA projects |
+| `/ralph <project> <prompt>` | Run Ralph orchestrator against a project |
+| `/skills` | List available browser automation skills |
+| `/scheduler` or `/schedule` | Manage scheduled jobs |
+
+### Gemini Tools
+
+These tools are available to the AI during conversation:
+
+| Tool | Description |
+|------|-------------|
+| `generate_cad_prototype` | Generate parametric 3D models from descriptions |
+| `generate_image` | Create AI-generated images |
+| `generate_video` | Create AI-generated video clips |
+| `write_file` | Write content to files (requires confirmation) |
+| `read_file` | Read file contents |
+| `read_directory` | List directory contents |
+
+### Agent Types
+
+| Agent | Description |
+|-------|-------------|
+| `freqtrade` | Crypto trading bot (FreqTrade) |
+| `hummingbot` | Market making bot (Hummingbot) |
+| `rl_trading` | Reinforcement learning trader |
+| `arbitrage` | Cross-exchange arbitrage |
+| `data_collector` | Market data collection |
+
+---
+
+## Project Structure
+
+```
+joda_ai_local/
+├── src/                          # React frontend
+│   ├── App.jsx                   # Root component + Socket.IO connection
+│   ├── main.jsx                  # Entry point
+│   ├── xrStore.js                # WebXR session store
+│   ├── components/
+│   │   ├── SpatialWorld.jsx      # Full-screen R3F Canvas
+│   │   ├── SpatialPanel.jsx      # 3D panel positioning + Html anchoring
+│   │   ├── spatialContext.js     # React context for spatial state
+│   │   ├── AvatarSwitch.jsx      # Avatar mode selector + RefBridge
+│   │   ├── AvatarController.jsx  # Avatar interaction logic
+│   │   ├── BeautifulAvatar.jsx   # GLB beautiful avatar
+│   │   ├── FullBodyAvatar.jsx    # GLB full-body avatar
+│   │   ├── AvatarCustomizer.jsx  # Appearance customization
+│   │   ├── JodaAvatar.jsx        # Original procedural avatar
+│   │   ├── XRPanel.jsx           # WebXR UIKit panel rendering
+│   │   ├── CadWindow.jsx         # CAD viewer (2D overlay)
+│   │   ├── ChatModule.jsx        # Chat interface
+│   │   ├── PrinterWindow.jsx     # Printer control + slicing
+│   │   ├── BrowserWindow.jsx     # Browser automation display
+│   │   ├── KasaWindow.jsx        # Smart home controls
+│   │   ├── SettingsWindow.jsx    # App settings
+│   │   ├── ToolsModule.jsx       # AI tools panel
+│   │   ├── MediaGalleryWindow.jsx # Generated media gallery
+│   │   ├── MemoryPrompt.jsx      # Memory management
+│   │   ├── AuthLock.jsx          # Face authentication
+│   │   ├── ConfirmationPopup.jsx # Tool confirmation dialog
+│   │   └── xr/                   # XR-specific components
+│   └── styles/
+├── backend/                      # Python backend
+│   ├── server.py                 # FastAPI + Socket.IO server
+│   ├── joda.py                   # Gemini 2.5 Live API integration
+│   ├── tools.py                  # Gemini tool definitions
+│   ├── cad_agent.py              # build123d CAD generation
+│   ├── printer_agent.py          # Printer discovery + OrcaSlicer
+│   ├── web_agent.py              # Playwright browser automation
+│   ├── kasa_agent.py             # TP-Link smart home
+│   ├── authenticator.py          # MediaPipe face auth
+│   ├── agent_manager.py          # Agent deployment framework
+│   ├── mcp_client.py             # MCP protocol client
+│   ├── scheduler_store.py        # Job scheduling
+│   ├── project_manager.py        # Project context management
+│   ├── media_generators.py       # Image/video generation
+│   ├── browser_use_agent.py      # Browser-use integration
+│   ├── settings.json             # Runtime settings
+│   └── mcp_servers.json          # MCP server registry
+├── external_tools/               # External integrations
+│   ├── pinokio/                  # Pinokio launcher
+│   ├── judge0/                   # Code execution
+│   └── zimage/                   # Z-Image models
+├── projects/                     # User project data
+├── yoda/                         # Agent Zero framework
+├── public/                       # Static assets
+├── docs/                         # Documentation
+│   └── sdk/                      # SDK guides + examples
+├── vite.config.js
+├── tailwind.config.js
+├── package.json
+├── requirements.txt
+└── .env                          # API keys (not committed)
+```
+
+---
+
+## SDK
+
+JODA exposes a Socket.IO-based API that lets you build plugins (extend JODA) and clients (connect to JODA from external apps).
+
+- **[SDK Overview](docs/sdk/README.md)** — Architecture and quick links
+- **[Plugin SDK](docs/sdk/plugin-sdk.md)** — Add custom tools, panels, and avatar modes
+- **[Client SDK](docs/sdk/client-sdk.md)** — Connect to JODA from any language
+- **[Events Reference](docs/sdk/events-reference.md)** — Complete Socket.IO event catalog
+
+---
+
+## Known Limitations
+
+- **WebXR panel interaction** — XR panels are visible but not yet interactive via hand/gaze input
+- **Single user** — One active voice session at a time per backend instance
+- **Gemini dependency** — Voice requires a Gemini API key; text-only fallback uses OpenAI/Ollama
+- **OrcaSlicer path** — Slicer must be installed separately and path configured
+- **Browser automation** — Playwright requires headed mode for some sites; CAPTCHA handling is limited
+- **Face auth** — Works best with consistent lighting; single-face reference only
+- **Electron** — Desktop app packaging is available but not actively maintained; browser-first recommended
+
+---
+
+## Contributing
+
+Contributions are welcome. Here's how to get started:
+
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Make your changes
+4. Test locally: `npm run dev`
+5. Commit with a descriptive message
+6. Open a pull request against `main`
+
+### Areas Where Help Is Wanted
+
+- WebXR panel interaction (gaze + hand input)
+- Additional avatar modes and animations
+- MCP server integrations
+- Mobile-responsive 2D fallback
+- Test coverage
+
+---
+
+## Security
+
+- **Face data**: Processed locally via MediaPipe. Never uploaded to any server.
+- **Browser credentials**: Stored in memory only (session-scoped). Cleared on disconnect.
+- **API keys**: Stored in `.env` (gitignored). Never logged or transmitted.
+- **File operations**: `write_file` tool requires explicit user confirmation before executing.
+- **Tool permissions**: Configurable per-tool auto-allow/deny/ask in settings.
+
+---
+
+## Acknowledgments
+
+JODA is built with and inspired by:
+
+- **[OpenClaw](https://github.com/openclaw/openclaw)** — Multi-agent AI framework that shaped JODA's architecture
+- **[ADA](https://github.com/nazirlouis/ada_v2)** — The voice assistant where it all began
+- **[Google Gemini](https://ai.google.dev/)** — Real-time voice AI via the Live API
+- **[React Three Fiber](https://docs.pmnd.rs/react-three-fiber)** — React renderer for Three.js
+- **[Three.js](https://threejs.org/)** — 3D graphics engine
+- **[@react-three/xr](https://github.com/pmndrs/xr)** — WebXR integration for R3F
+- **[build123d](https://github.com/gumyr/build123d)** — Parametric CAD in Python
+- **[MediaPipe](https://developers.google.com/mediapipe)** — Face recognition and hand tracking
+- **[OrcaSlicer](https://github.com/SoftFever/OrcaSlicer)** — 3D print slicing
+- **[Socket.IO](https://socket.io/)** — Real-time bidirectional communication
+- **[Playwright](https://playwright.dev/)** — Browser automation
+
+---
+
+## License
+
+MIT License. See [LICENSE](LICENSE) for details.

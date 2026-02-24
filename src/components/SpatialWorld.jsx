@@ -7,7 +7,6 @@ import SpatialPanel from './SpatialPanel';
 import AvatarController from './AvatarController';
 import AvatarSwitch from './AvatarSwitch';
 import XRAudioBridge from './XRAudioBridge';
-import useSpatialTracking from '../hooks/useSpatialTracking';
 
 /**
  * SpatialWorld - The single full-screen Canvas that replaces the entire 2D layout.
@@ -158,8 +157,9 @@ export default function SpatialWorld({
   onPanelRotate,
   audioHandlers,
 }) {
-  // Spatial tracking for Vision Pro non-VR mode
-  const spatialTracking = useSpatialTracking();
+  // Spatial tracking disabled — useSpatialTracking's require('three') conflicts
+  // with Vite/R3F's pre-bundled copy, creating duplicate React instances.
+  const spatialTracking = useMemo(() => ({ active: false, poseRef: { current: null }, request: () => {} }), []);
 
   // Camera disable/enable for panel dragging
   const cameraEnabledRef = useRef(true);
@@ -176,103 +176,57 @@ export default function SpatialWorld({
     setCameraEnabled(true);
   }, []);
 
+  // Stable portal container for drei <Html> — prevents portal teardown
+  // when XR's events.connected changes the default target.
+  const portalRef = useRef(null);
+  const [portalReady, setPortalReady] = useState(false);
+  useEffect(() => {
+    if (portalRef.current) setPortalReady(true);
+  }, []);
+
   // Memoize context value to prevent unnecessary re-renders
   const spatialContextValue = useMemo(
-    () => ({ disableCamera, enableCamera }),
+    () => ({ disableCamera, enableCamera, portalRef }),
     [disableCamera, enableCamera]
   );
 
-  // Fix visionOS interaction: after R3F mounts, patch the DOM so
-  // eye-tracking + pinch can reach the drei <Html> overlay panels.
-  const handleCreated = useCallback((state) => {
-    const canvas = state.gl.domElement;
-
-    // 1. R3F sets touch-action:none on the canvas which blocks visionOS
-    //    gesture recognition on overlaid HTML. Switch to manipulation.
-    canvas.style.touchAction = 'manipulation';
-
-    // 2. Ensure the canvas sits in a known stacking layer so drei's
-    //    Html portal containers can be reliably placed above it.
-    const canvasWrapper = canvas.parentElement;
-    if (canvasWrapper) {
-      canvasWrapper.style.position = 'relative';
-      canvasWrapper.style.zIndex = '0';
-    }
-
-    // 3. Fix drei Html portal containers: visionOS system-level hit
-    //    testing skips subtrees with pointer-events:none. Patch any
-    //    portal siblings to use pointer-events:auto and ensure they
-    //    sit above the canvas layer.
-    const root = canvasWrapper?.parentElement;
-    if (root) {
-      Array.from(root.children).forEach((child) => {
-        if (child !== canvasWrapper) {
-          child.style.zIndex = '1';
-          child.style.pointerEvents = 'auto';
-        }
-      });
-
-      // Re-run when drei adds new portal containers (panels mount later)
-      const observer = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          for (const node of m.addedNodes) {
-            if (node.nodeType === 1 && node !== canvasWrapper) {
-              node.style.zIndex = '1';
-              node.style.pointerEvents = 'auto';
-            }
-          }
-        }
-      });
-      observer.observe(root, { childList: true });
-
-      // Cleanup observer when Canvas unmounts (R3F handles this)
-      canvas._visionOSObserver = observer;
-    }
-  }, []);
-
-  // Cleanup the MutationObserver on unmount
-  useEffect(() => {
-    return () => {
-      const container = containerRef.current;
-      if (container) {
-        const canvas = container.querySelector('canvas');
-        if (canvas?._visionOSObserver) {
-          canvas._visionOSObserver.disconnect();
-        }
-      }
-    };
-  }, []);
-
   return (
-    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }}>
-    <Canvas
-      dpr={[1, 2]}
-      gl={{
-        antialias: true,
-        alpha: false,
-        powerPreference: 'high-performance',
-      }}
-      camera={{ position: [0, 3, 8], fov: 60 }}
-      shadows
-      style={{ width: '100%', height: '100%' }}
-      onCreated={handleCreated}
-    >
-      <XR store={xrStore}>
-        <SpatialContext.Provider value={spatialContextValue}>
-          <SceneContent
-            avatarMode={avatarMode}
-            avatarPropsRef={avatarPropsRef}
-            panels={panels}
-            onPanelMove={onPanelMove}
-            onPanelResize={onPanelResize}
-            onPanelRotate={onPanelRotate}
-            cameraEnabled={cameraEnabled}
-            audioHandlers={audioHandlers}
-            spatialTracking={spatialTracking}
-          />
-        </SpatialContext.Provider>
-      </XR>
-    </Canvas>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+      {/* Stable portal target for drei Html panels — sits above the Canvas */}
+      <div
+        ref={portalRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+          overflow: 'visible',
+          zIndex: 1,
+        }}
+      />
+      <Canvas
+        dpr={[1, 2]}
+        camera={{ position: [0, 3, 8], fov: 60 }}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <XR store={xrStore}>
+          <SpatialContext.Provider value={spatialContextValue}>
+            <SceneContent
+              avatarMode={avatarMode}
+              avatarPropsRef={avatarPropsRef}
+              panels={panels}
+              onPanelMove={onPanelMove}
+              onPanelResize={onPanelResize}
+              onPanelRotate={onPanelRotate}
+              cameraEnabled={cameraEnabled}
+              audioHandlers={audioHandlers}
+              spatialTracking={spatialTracking}
+            />
+          </SpatialContext.Provider>
+        </XR>
+      </Canvas>
     </div>
   );
 }

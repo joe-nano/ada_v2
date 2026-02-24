@@ -5,17 +5,21 @@ import StreamingAvatar, {
     TaskType,
 } from '@heygen/streaming-avatar';
 
-// Backend base URL - use same URL as Socket connection (supports HTTPS tunnels)
+// Backend base URL - use same URL as Socket connection (supports HTTPS tunnels + dev:xr proxy)
 const DEFAULT_VPS_IP = '72.62.165.102';
 const BACKEND_PORT = import.meta.env.VITE_BACKEND_PORT ?? '8765';
 const runtimeHostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+const isElectron = typeof window !== 'undefined' && window.location.protocol === 'file:';
 const backendHost = import.meta.env.VITE_BACKEND_HOST ?? runtimeHostname ?? '';
-const backendProtocol =
-    typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https' : 'http';
+const backendProtocol = isHttps ? 'https' : 'http';
 
-// Use VITE_SOCKET_URL if available (for HTTPS tunnel), otherwise construct URL
-const socketUrl = import.meta.env.VITE_SOCKET_URL ?? `${backendProtocol}://${backendHost || DEFAULT_VPS_IP}:${BACKEND_PORT}`;
-const backendBaseUrl = socketUrl;
+// In HTTPS mode, use same-origin (Vite proxies to backend). Otherwise connect directly.
+const backendBaseUrl =
+    import.meta.env.VITE_SOCKET_URL ??
+    (isHttps && !isElectron
+        ? ''
+        : `${backendProtocol}://${backendHost || DEFAULT_VPS_IP}:${BACKEND_PORT}`);
 
 /**
  * HeyGen Realistic AI Avatar Component

@@ -41,8 +41,12 @@ function XRButton({ label, active, color = '#22d3ee', onPress, position }) {
     clearTimeout(dwellTimer.current);
   }, []);
 
+  const lastFireRef = useRef(0);
   const handleClick = useCallback((e) => {
     e.stopPropagation();
+    const now = Date.now();
+    if (now - lastFireRef.current < 200) return; // debounce
+    lastFireRef.current = now;
     clearTimeout(dwellTimer.current);
     onPress?.();
   }, [onPress]);
@@ -87,8 +91,6 @@ function XRButton({ label, active, color = '#22d3ee', onPress, position }) {
         material={bgMaterial}
         onPointerEnter={handleEnter}
         onPointerLeave={handleLeave}
-        onPointerDown={handleClick}
-        onPointerUp={handleClick}
         onClick={handleClick}
       >
         <planeGeometry args={[BTN_W, BTN_H]} />
@@ -148,6 +150,8 @@ export default function XRToolsPanel({
   showCadWindow = false,
   showBrowserWindow = false,
   showMediaGallery = false,
+  vrPerspective = 'first',
+  vrLocomotionMode = 'smooth',
   onTogglePower,
   onToggleMute,
   onToggleSpeaker,
@@ -159,9 +163,12 @@ export default function XRToolsPanel({
   onToggleCad,
   onToggleBrowser,
   onToggleMedia,
+  onTogglePerspective,
+  onToggleLocomotion,
 }) {
   const row1 = useMemo(() => rowPositions(6, 0.03), []);
   const row2 = useMemo(() => rowPositions(5, -0.03), []);
+  const row3 = useMemo(() => rowPositions(2, -0.09), []);
 
   return (
     <group>
@@ -179,6 +186,10 @@ export default function XRToolsPanel({
       <XRButton position={row2[2]} label="CAD" active={showCadWindow} color="#c084fc" onPress={onToggleCad} />
       <XRButton position={row2[3]} label="BROWSER" active={showBrowserWindow} color="#2dd4bf" onPress={onToggleBrowser} />
       <XRButton position={row2[4]} label="MEDIA" active={showMediaGallery} color="#f87171" onPress={onToggleMedia} />
+
+      {/* Row 3: VR navigation */}
+      <XRButton position={row3[0]} label={vrPerspective === 'first' ? '1ST PER' : '3RD PER'} active={vrPerspective === 'third'} color="#e879f9" onPress={onTogglePerspective} />
+      <XRButton position={row3[1]} label={vrLocomotionMode === 'smooth' ? 'SMOOTH' : 'TELEPORT'} active={vrLocomotionMode === 'teleport'} color="#38bdf8" onPress={onToggleLocomotion} />
     </group>
   );
 }

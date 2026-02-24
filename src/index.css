@@ -217,17 +217,60 @@ body {
   );
 }
 
-/* Rotate hint icon in title bar */
-.panel-rotate-hint {
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.2);
-  cursor: help;
+/* Rotate grip in title bar — drag to rotate panel */
+.panel-rotate-grip {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: grab;
   flex-shrink: 0;
   line-height: 1;
   user-select: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  transition: background 150ms, color 150ms;
+  touch-action: none;
 }
-.panel-rotate-hint:hover {
+.panel-rotate-grip:hover {
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+}
+.panel-rotate-grip:active {
+  cursor: grabbing;
+  color: rgba(59, 130, 246, 0.9);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+/* Rotation button bar — row of quick-rotate buttons below the handle */
+.panel-rotate-bar {
+  display: flex;
+  gap: 2px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  height: 28px;
+  align-items: center;
+}
+
+.panel-rotate-bar button {
+  flex: 1;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
   color: rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  font-size: 9px;
+  cursor: pointer;
+  padding: 2px 0;
+  transition: background 150ms, color 150ms;
+}
+.panel-rotate-bar button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 /* === visionOS / eye-tracking interaction support ===
@@ -290,6 +333,20 @@ body {
 }
 .spatial-panel input::placeholder {
   color: rgba(255, 255, 255, 0.35) !important;
+}
+
+/* === Gaze-ray highlight for AVP non-VR mode === */
+@keyframes gazeGlow {
+  0%   { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 8px rgba(0, 229, 255, 0.3); }
+  50%  { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(0, 229, 255, 0.5); }
+  100% { box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 8px rgba(0, 229, 255, 0.3); }
+}
+
+.spatial-panel.gaze-active {
+  border-color: rgba(0, 229, 255, 0.5);
+  animation: gazeGlow 1.2s ease-in-out infinite;
+  transform: translateZ(2px);
+  transition: border-color 200ms ease, transform 200ms ease;
 }
 
 /* Avatar billboard animations */

@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "concurrently -k \"node ./node_modules/vite/dist/node/cli.js\" \"wait-on tcp:5173 && npx electron .\"",
     "dev:vps": "node ./node_modules/vite/dist/node/cli.js",
+    "dev:xr": "JODA_HTTPS=true node ./node_modules/vite/dist/node/cli.js",
+    "dev:tunnel": "JODA_TUNNEL=true node ./node_modules/vite/dist/node/cli.js",
     "build": "node ./node_modules/vite/dist/node/cli.js build",
     "start": "npx electron ."
   },
@@ -38,6 +40,7 @@
     }
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.1.4",
     "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.17",
     "concurrently": "^8.2.2",
