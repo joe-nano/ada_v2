@@ -360,6 +360,7 @@ function App() {
     const micSentFirstChunkRef = useRef(false);
     const micSampleRateRef = useRef(16000);
     const micSuspensionIntervalRef = useRef(null);
+    const micAnalyserRef = useRef(null); // shared analyser for mic level bar
 
     // Safari detection helper — Safari ignores requested sampleRate and
     // may need JSON-serialized audio chunks instead of raw ArrayBuffer.
@@ -463,6 +464,17 @@ function App() {
             source.connect(processor);
             processor.connect(audioContext.destination);
 
+            // Attach an AnalyserNode to the SAME AudioContext so the mic
+            // level bar and the streaming ScriptProcessor share one context.
+            // Safari may refuse to deliver audio frames when two separate
+            // AudioContexts access the same mic device — merging them fixes
+            // the "bar shows levels but Gemini gets nothing" bug.
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = 64;
+            source.connect(analyser);
+            // Expose the analyser on a ref so the visualizer loop can read it
+            micAnalyserRef.current = analyser;
+
             // External suspension poller — Safari/visionOS can suspend the
             // AudioContext outside the processor callback (deadlock: the
             // onaudioprocess handler never fires so it can't self-resume).
@@ -496,6 +508,7 @@ function App() {
             }
         } finally {
             micSuspensionIntervalRef.current = null;
+            micAnalyserRef.current = null;
             micProcessorRef.current = null;
             micSourceNodeRef.current = null;
             micAudioContextRef.current = null;
@@ -1249,19 +1262,30 @@ function App() {
     const startMicVisualizer = async (deviceId) => {
         stopMicVisualizer();
         try {
-            if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-                throw new Error('Mic requires HTTPS or localhost');
+            // Prefer the shared analyser from the mic streaming AudioContext
+            // so Safari doesn't have two AudioContexts fighting over the mic.
+            // If mic streaming is active, micAnalyserRef is already connected
+            // to the same source node and AudioContext as the ScriptProcessor.
+            const sharedAnalyser = micAnalyserRef.current;
+
+            if (!sharedAnalyser) {
+                // Fallback: no mic stream active yet — create standalone context
+                if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+                    throw new Error('Mic requires HTTPS or localhost');
+                }
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { deviceId: { exact: deviceId } }
+                });
+
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                analyserRef.current = audioContextRef.current.createAnalyser();
+                analyserRef.current.fftSize = 64;
+
+                sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+                sourceRef.current.connect(analyserRef.current);
+            } else {
+                analyserRef.current = sharedAnalyser;
             }
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: { deviceId: { exact: deviceId } }
-            });
-
-            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            analyserRef.current = audioContextRef.current.createAnalyser();
-            analyserRef.current.fftSize = 64;
-
-            sourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
-            sourceRef.current.connect(analyserRef.current);
 
             const updateMicData = () => {
                 if (!analyserRef.current) return;
@@ -1293,8 +1317,16 @@ function App() {
 
     const stopMicVisualizer = () => {
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        if (sourceRef.current) sourceRef.current.disconnect();
+        animationFrameRef.current = null;
+        // Only disconnect/close the standalone visualizer context — don't
+        // touch the shared mic streaming context (owned by stopBrowserMicStream).
+        if (sourceRef.current && analyserRef.current !== micAnalyserRef.current) {
+            sourceRef.current.disconnect();
+        }
         if (audioContextRef.current) audioContextRef.current.close();
+        sourceRef.current = null;
+        audioContextRef.current = null;
+        analyserRef.current = null;
     };
 
     const startVideo = async () => {

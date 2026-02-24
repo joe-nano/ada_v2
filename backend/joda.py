@@ -673,7 +673,8 @@ class AudioLoop:
 
         # If true, audio is supplied by the web client (Socket.IO) instead of server-side PyAudio.
         self.use_external_audio = False
-        self.external_audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=50)
+        self.external_audio_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=200)
+        self._external_audio_drops: int = 0
 
         # Shell execution safety mode (expanded allowlist, still confirmation-gated).
         self.shell_expert_mode = False
@@ -1230,6 +1231,9 @@ class AudioLoop:
             self.external_audio_queue.put_nowait(pcm_s16le)
         except asyncio.QueueFull:
             # Drop oldest to keep latency down
+            self._external_audio_drops += 1
+            if self._external_audio_drops % 50 == 1:
+                print(f"[JODA] external_audio_queue full — dropped {self._external_audio_drops} chunks total (qsize={self.external_audio_queue.qsize()})")
             try:
                 _ = self.external_audio_queue.get_nowait()
             except Exception:
