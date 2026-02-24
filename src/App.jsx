@@ -352,12 +352,18 @@ function App() {
     };
 
     // Browser mic streaming -> backend (for VPS/web mode)
+    const preCapturedStreamRef = useRef(null); // visionOS: mic captured before XR entry
     const micStreamRef = useRef(null);
     const micAudioContextRef = useRef(null);
     const micSourceNodeRef = useRef(null);
     const micProcessorRef = useRef(null);
     const micSentFirstChunkRef = useRef(false);
     const micSampleRateRef = useRef(16000);
+    const micSuspensionIntervalRef = useRef(null);
+
+    // Safari detection helper — Safari ignores requested sampleRate and
+    // may need JSON-serialized audio chunks instead of raw ArrayBuffer.
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 
     useEffect(() => {
         isMutedRef.current = isMuted;
@@ -371,19 +377,30 @@ function App() {
             return;
         }
         try {
-            // Use selected mic device if available, otherwise system default
-            const savedMic = localStorage.getItem('selectedMicId');
-            const audioConstraints = savedMic
-                ? { deviceId: { ideal: savedMic } }
-                : true;
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+            // On visionOS, getUserMedia returns a dead stream inside an active
+            // XR session. Reuse the pre-captured stream when available.
+            let stream;
+            if (preCapturedStreamRef.current && preCapturedStreamRef.current.active) {
+                stream = preCapturedStreamRef.current;
+                console.log('[MicStream] Reusing pre-captured mic stream for XR');
+            } else {
+                const savedMic = localStorage.getItem('selectedMicId');
+                const audioConstraints = savedMic
+                    ? { deviceId: { ideal: savedMic } }
+                    : true;
+                stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+            }
             micStreamRef.current = stream;
 
             // All browsers: use ScriptProcessorNode to send raw PCM Int16.
             // MediaRecorder on Safari sends audio/mp4 (AAC) which the backend
             // cannot decode for transcription. ScriptProcessorNode works on
             // Safari 17+ / visionOS Safari and sends raw PCM that the backend expects.
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+            //
+            // Don't request 16kHz — Safari ignores the requested sampleRate
+            // silently and uses the device native rate (44100/48000). Let the
+            // browser use its native rate; the backend resamples to 16kHz.
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
 
             // Safari suspends new AudioContexts until resumed after a user gesture.
             // Without this, onaudioprocess never fires and no audio is transmitted.
@@ -417,10 +434,17 @@ function App() {
                     const s = Math.max(-1, Math.min(1, input[i]));
                     int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
                 }
-                // Send as raw ArrayBuffer (not wrapped in object) for Safari compatibility.
-                // Socket.IO handles binary ArrayBuffer natively on all browsers.
-                // Then send sample_rate separately so backend can resample if needed.
-                socket.emit('mic_audio_chunk', int16.buffer);
+                // Safari: send as JSON object with sample rate inline to avoid
+                // binary serialization issues and race with mic_sample_rate event.
+                // Chrome: send raw ArrayBuffer for best performance.
+                if (isSafari) {
+                    socket.emit('mic_audio_chunk', {
+                        sr: audioContext.sampleRate,
+                        pcm: Array.from(int16),
+                    });
+                } else {
+                    socket.emit('mic_audio_chunk', int16.buffer);
+                }
 
                 chunkCount++;
                 if (chunkCount === 1) {
@@ -438,6 +462,17 @@ function App() {
 
             source.connect(processor);
             processor.connect(audioContext.destination);
+
+            // External suspension poller — Safari/visionOS can suspend the
+            // AudioContext outside the processor callback (deadlock: the
+            // onaudioprocess handler never fires so it can't self-resume).
+            micSuspensionIntervalRef.current = setInterval(() => {
+                if (micAudioContextRef.current?.state === 'suspended') {
+                    console.log('[MicStream] AudioContext suspended externally, resuming…');
+                    micAudioContextRef.current.resume();
+                }
+            }, 1000);
+
             addMessage('System', 'Browser mic streaming enabled.');
         } catch (err) {
             console.error('[MicStream] failed:', err);
@@ -447,6 +482,9 @@ function App() {
 
     const stopBrowserMicStream = async () => {
         try {
+            if (micSuspensionIntervalRef.current) {
+                clearInterval(micSuspensionIntervalRef.current);
+            }
             if (micProcessorRef.current) {
                 micProcessorRef.current.disconnect();
                 micProcessorRef.current.onaudioprocess = null;
@@ -457,6 +495,7 @@ function App() {
                 micStreamRef.current.getTracks().forEach((t) => t.stop());
             }
         } finally {
+            micSuspensionIntervalRef.current = null;
             micProcessorRef.current = null;
             micSourceNodeRef.current = null;
             micAudioContextRef.current = null;
@@ -2076,6 +2115,7 @@ function App() {
                             setSelectedSpeakerId(deviceId);
                             localStorage.setItem('selectedSpeakerId', deviceId);
                         },
+                        preCapturedStreamRef,
                     }}
                     onPanelResize={handlePanelResize}
                     onPanelRotate={handlePanelRotate}

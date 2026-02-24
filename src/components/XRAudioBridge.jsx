@@ -12,6 +12,12 @@ import { useXR } from '@react-three/xr';
  * Also auto-detects headset audio output on XR entry and restores
  * the previous speaker selection on exit.
  *
+ * On visionOS, getUserMedia produces 0-byte audio during active
+ * WebXR sessions (Apple bug). To work around this, the component
+ * accepts a `preCapturedStreamRef` — a mic stream obtained BEFORE
+ * entering XR — and reuses it instead of calling startMic() which
+ * would create a new (broken) stream.
+ *
  * Supports two voice input paths:
  * - Gemini mode: raw mic audio via startMic
  * - OpenAI fallback mode: browser SpeechRecognition via startSpeechRec
@@ -24,9 +30,25 @@ export default function XRAudioBridge({
   isOpenAiFallbackRef,
   selectedSpeakerId,
   onSpeakerChange,
+  preCapturedStreamRef,
 }) {
   const { session } = useXR();
   const preXrSpeakerIdRef = useRef(null);
+
+  // Pre-capture mic stream when the component mounts (before XR entry)
+  // so visionOS doesn't give us a dead stream inside XR.
+  useEffect(() => {
+    if (preCapturedStreamRef && !preCapturedStreamRef.current) {
+      navigator.mediaDevices?.getUserMedia({ audio: true })
+        .then((stream) => {
+          preCapturedStreamRef.current = stream;
+          console.log('[XRAudioBridge] Pre-captured mic stream for XR');
+        })
+        .catch((e) => {
+          console.warn('[XRAudioBridge] Pre-capture mic failed:', e);
+        });
+    }
+  }, [preCapturedStreamRef]);
 
   useEffect(() => {
     if (!session) return;

@@ -108,6 +108,7 @@ function SceneContent({
           isOpenAiFallbackRef={audioHandlers.isOpenAiFallbackRef}
           selectedSpeakerId={audioHandlers.selectedSpeakerId}
           onSpeakerChange={audioHandlers.onSpeakerChange}
+          preCapturedStreamRef={audioHandlers.preCapturedStreamRef}
         />
       )}
 

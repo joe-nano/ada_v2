@@ -24,6 +24,7 @@ import shlex
 from datetime import datetime
 from pathlib import Path
 import time
+import struct
 import httpx
 import sys
 from array import array
@@ -218,6 +219,7 @@ _openai_histories = {}
 _mic_debug_seen: set[str] = set()
 _mic_resample_state: dict[str, float] = {}
 _mic_sample_rates: dict[str, int] = {}  # per-session sample rate from browser
+_mic_bytes_counter: dict[str, list] = {}  # per-session [bytes_count, last_log_time]
 _browser_secrets: dict[str, dict[str, str]] = {}
 _browser_skills = BrowserSkillsStore()
 _scheduler_store = SchedulerStore()
@@ -1202,6 +1204,7 @@ async def disconnect(sid):
     _mic_debug_seen.discard(sid)
     _mic_resample_state.pop(sid, None)
     _mic_sample_rates.pop(sid, None)
+    _mic_bytes_counter.pop(sid, None)
     _browser_secrets.pop(sid, None)
 
 
@@ -2216,7 +2219,7 @@ async def mic_audio_chunk(sid, data):
                 dlen = len(data) if hasattr(data, "__len__") else None
                 sr = None
                 if isinstance(data, dict):
-                    sr = data.get("sample_rate")
+                    sr = data.get("sample_rate") or data.get("sr")
                 print(
                     f"[SERVER] mic_audio_chunk first packet: type={dtype} len={dlen} "
                     f"sample_rate={sr} stored_sr={_mic_sample_rates.get(sid)} "
@@ -2239,15 +2242,45 @@ async def mic_audio_chunk(sid, data):
                     print(f"[SERVER] mic_audio_chunk resample failed (sr={sample_rate}): {e}")
             audio_loop.feed_external_audio(pcm)
 
+        # Diagnostic: log effective sample rate every 5 seconds
+        now = time.monotonic()
+        if sid not in _mic_bytes_counter:
+            _mic_bytes_counter[sid] = [0, now]
+        counter = _mic_bytes_counter[sid]
+
+        def _track_bytes(n: int) -> None:
+            counter[0] += n
+            if now - counter[1] >= 5.0:
+                bps = counter[0] / (now - counter[1])
+                sr_eff = _mic_sample_rates.get(sid, "?")
+                print(f"[SERVER] mic {sid[:8]}… {bps:.0f} B/s, sr={sr_eff}")
+                counter[0] = 0
+                counter[1] = now
+
         # Look up stored sample rate for raw binary payloads (Safari sends raw ArrayBuffer).
         stored_sr = _mic_sample_rates.get(sid)
 
+        # Safari JSON path: { sr: <number>, pcm: [int, …] }
+        if isinstance(data, dict) and "pcm" in data:
+            sr = data.get("sr")
+            pcm_list = data["pcm"]
+            # pcm is a list of signed int16 values — convert to s16le bytes
+            payload = struct.pack(f"<{len(pcm_list)}h", *pcm_list)
+            effective_sr = int(sr) if sr else stored_sr
+            if sr:
+                _mic_sample_rates[sid] = int(sr)
+            _track_bytes(len(payload))
+            _feed(payload, effective_sr)
+            return
+
         # python-socketio delivers binary payloads as `bytes`.
         if isinstance(data, (bytes, bytearray)):
+            _track_bytes(len(data))
             _feed(bytes(data), stored_sr)
             return
 
         if isinstance(data, memoryview):
+            _track_bytes(len(data))
             _feed(data.tobytes(), stored_sr)
             return
 
@@ -2256,15 +2289,18 @@ async def mic_audio_chunk(sid, data):
             sr = data.get("sample_rate")
             payload = data["data"]
             if isinstance(payload, (bytes, bytearray)):
+                _track_bytes(len(payload))
                 _feed(bytes(payload), int(sr) if isinstance(sr, (int, float)) else None)
                 return
             if isinstance(payload, memoryview):
+                _track_bytes(len(payload))
                 _feed(payload.tobytes(), int(sr) if isinstance(sr, (int, float)) else None)
                 return
             return
 
         # Fallback: list/tuple of ints (0-255)
         if isinstance(data, (list, tuple)) and data and isinstance(data[0], int):
+            _track_bytes(len(data))
             _feed(bytes(data), None)
             return
     except Exception as e:
