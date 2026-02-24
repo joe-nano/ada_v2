@@ -473,28 +473,30 @@ function App() {
                     if (int16[i] !== 0) nonZeroCount++;
                 }
 
-                // Safari: send as JSON object with sample rate inline to avoid
-                // binary serialization issues and race with mic_sample_rate event.
-                // Chrome: send raw ArrayBuffer for best performance.
-                if (isSafari) {
-                    const payload = {
-                        sr: audioContext.sampleRate,
-                        pcm: Array.from(int16),
-                    };
-                    socket.emit('mic_audio_chunk', payload);
-                    if (chunkCount < 3) {
-                        console.log('[MicStream] Safari chunk emitted', {
-                            chunk: chunkCount,
-                            payloadKeys: Object.keys(payload),
-                            sr: payload.sr,
-                            pcmLen: payload.pcm.length,
-                            pcmFirst5: payload.pcm.slice(0, 5),
-                            pcmNonZero: nonZeroCount,
-                            rms: rms.toFixed(6),
-                        });
-                    }
-                } else {
-                    socket.emit('mic_audio_chunk', int16.buffer);
+                // ALWAYS send sample rate with every chunk to prevent the race
+                // condition where mic_sample_rate event arrives on a different
+                // socket session or gets lost. This was the root cause of
+                // "audio bar shows levels but Gemini never transcribes" —
+                // 48kHz audio was fed to Gemini without resampling to 16kHz.
+                //
+                // Safari: JSON object (binary serialization can be unreliable)
+                // Chrome: JSON object too — the overhead is acceptable and
+                //         reliability is more important than micro-optimization.
+                const payload = {
+                    sr: audioContext.sampleRate,
+                    pcm: Array.from(int16),
+                };
+                socket.emit('mic_audio_chunk', payload);
+
+                if (chunkCount < 3) {
+                    console.log(`[MicStream] Chunk #${chunkCount} emitted`, {
+                        sr: payload.sr,
+                        pcmLen: payload.pcm.length,
+                        pcmFirst5: payload.pcm.slice(0, 5),
+                        pcmNonZero: nonZeroCount,
+                        rms: rms.toFixed(6),
+                        isSafari,
+                    });
                 }
 
                 chunkCount++;

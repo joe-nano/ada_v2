@@ -2259,6 +2259,10 @@ async def mic_audio_chunk(sid, data):
 
         def _feed(pcm: bytes, sample_rate: int | None = None) -> None:
             # Gemini expects 16kHz PCM s16le mono; many browsers actually run 48k.
+            # Default to 48kHz if unknown — feeding raw 48k to Gemini (expects 16k)
+            # makes speech 3x fast and unintelligible.
+            if not sample_rate or not isinstance(sample_rate, int) or sample_rate <= 0:
+                sample_rate = 48000
             target_rate = 16000
             pre_len = len(pcm)
             if sample_rate and isinstance(sample_rate, int) and sample_rate > 0 and sample_rate != target_rate:
