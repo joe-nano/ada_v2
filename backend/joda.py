@@ -1069,28 +1069,55 @@ class AudioLoop:
         # No event signal needed - listen_audio pulls it
 
     async def send_realtime(self):
+        import time as _time_mod
+        _rt_count = 0
+        _rt_last_log = _time_mod.monotonic()
         while True:
             msg = await self.out_queue.get()
             await self.session.send(input=msg, end_of_turn=False)
+            _rt_count += 1
+            now = _time_mod.monotonic()
+            if _rt_count == 1:
+                mt = msg.get("mime_type", "?") if isinstance(msg, dict) else "?"
+                dlen = len(msg.get("data", b"")) if isinstance(msg, dict) else "?"
+                print(f"[JODA] send_realtime: ▶ first msg to Gemini (mime={mt}, {dlen}B)")
+            if now - _rt_last_log >= 10.0:
+                print(f"[JODA] send_realtime: {_rt_count} msgs sent to Gemini session")
+                _rt_last_log = now
 
     async def listen_audio(self):
         # External audio mode (browser mic streaming)
         if self.use_external_audio:
             print("[JODA] Using external audio input (web client).")
+            _ext_chunks_sent = 0
+            _ext_last_log = time.monotonic() if 'time' in dir() else __import__('time').monotonic()
+            import time as _time_mod
             while True:
                 if self.paused:
+                    if _ext_chunks_sent == 0:
+                        print("[JODA] listen_audio: paused, waiting…")
                     await asyncio.sleep(0.05)
                     continue
                 # Don't consume external audio until the Gemini session is ready and `out_queue` exists.
-                # Otherwise we drop audio during connect/reconnect windows and transcription appears "dead".
                 if not self.out_queue:
+                    if _ext_chunks_sent == 0:
+                        print("[JODA] listen_audio: out_queue not ready, waiting…")
                     await asyncio.sleep(0.05)
                     continue
                 try:
                     data = await self.external_audio_queue.get()
                     await self.out_queue.put({"data": data, "mime_type": "audio/pcm"})
+                    _ext_chunks_sent += 1
+                    now = _time_mod.monotonic()
+                    if _ext_chunks_sent == 1:
+                        is_silent = all(b == 0 for b in data[:100]) if len(data) >= 100 else all(b == 0 for b in data)
+                        print(f"[JODA] listen_audio: ▶ first chunk → Gemini ({len(data)}B, silent={is_silent})")
+                    if now - _ext_last_log >= 5.0:
+                        print(f"[JODA] listen_audio: {_ext_chunks_sent} chunks → Gemini, qsize={self.external_audio_queue.qsize()}, drops={self._external_audio_drops}")
+                        _ext_last_log = now
                 except Exception as e:
                     print(f"[JODA] [ERR] External audio loop error: {e}")
+                    import traceback; traceback.print_exc()
                     await asyncio.sleep(0.05)
             # unreachable
 

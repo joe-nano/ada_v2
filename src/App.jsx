@@ -378,6 +378,8 @@ function App() {
             return;
         }
         try {
+            console.log('[MicStream] === STARTING ===', { isSafari, ua: navigator.userAgent });
+
             // On visionOS, getUserMedia returns a dead stream inside an active
             // XR session. Reuse the pre-captured stream when available.
             let stream;
@@ -389,15 +391,25 @@ function App() {
                 const audioConstraints = savedMic
                     ? { deviceId: { ideal: savedMic } }
                     : true;
+                console.log('[MicStream] Requesting getUserMedia…', { savedMic, audioConstraints });
                 stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
             }
             micStreamRef.current = stream;
 
+            // Log stream track details
+            const track = stream.getAudioTracks()[0];
+            const trackSettings = track?.getSettings?.() || {};
+            console.log('[MicStream] Got stream', {
+                active: stream.active,
+                trackState: track?.readyState,
+                trackEnabled: track?.enabled,
+                trackLabel: track?.label,
+                channelCount: trackSettings.channelCount,
+                sampleRate: trackSettings.sampleRate,
+                sampleSize: trackSettings.sampleSize,
+            });
+
             // All browsers: use ScriptProcessorNode to send raw PCM Int16.
-            // MediaRecorder on Safari sends audio/mp4 (AAC) which the backend
-            // cannot decode for transcription. ScriptProcessorNode works on
-            // Safari 17+ / visionOS Safari and sends raw PCM that the backend expects.
-            //
             // Don't request 16kHz — Safari ignores the requested sampleRate
             // silently and uses the device native rate (44100/48000). Let the
             // browser use its native rate; the backend resamples to 16kHz.
@@ -405,17 +417,24 @@ function App() {
 
             // Safari suspends new AudioContexts until resumed after a user gesture.
             // Without this, onaudioprocess never fires and no audio is transmitted.
+            console.log('[MicStream] AudioContext created', {
+                state: audioContext.state,
+                sampleRate: audioContext.sampleRate,
+                baseLatency: audioContext.baseLatency,
+                outputLatency: audioContext.outputLatency,
+            });
             if (audioContext.state === 'suspended') {
+                console.log('[MicStream] AudioContext suspended — calling resume()…');
                 await audioContext.resume();
+                console.log('[MicStream] AudioContext after resume():', audioContext.state);
             }
 
             micAudioContextRef.current = audioContext;
-            // Safari may ignore the requested sampleRate and use the device native
-            // rate (44100/48000). Read the actual rate so the backend knows.
             micSampleRateRef.current = audioContext.sampleRate || 16000;
-            console.log('[MicStream] AudioContext state:', audioContext.state, 'sampleRate:', audioContext.sampleRate);
             // Tell backend the actual sample rate so it can resample if needed.
             socket.emit('mic_sample_rate', { sample_rate: micSampleRateRef.current });
+            console.log('[MicStream] Sent mic_sample_rate:', micSampleRateRef.current);
+
             const source = audioContext.createMediaStreamSource(stream);
             micSourceNodeRef.current = source;
 
@@ -423,71 +442,125 @@ function App() {
             micProcessorRef.current = processor;
 
             let chunkCount = 0;
+            let silentChunks = 0;
+            let totalRms = 0;
             processor.onaudioprocess = (event) => {
                 if (isMutedRef.current) return;
                 // Safari can re-suspend the context; nudge it back.
                 if (audioContext.state === 'suspended') {
+                    console.warn('[MicStream] Context suspended inside onaudioprocess — resuming');
                     audioContext.resume();
                 }
                 const input = event.inputBuffer.getChannelData(0);
+
+                // Compute RMS to detect silent/dead input
+                let sumSq = 0;
+                for (let i = 0; i < input.length; i++) sumSq += input[i] * input[i];
+                const rms = Math.sqrt(sumSq / input.length);
+                totalRms += rms;
+                const isSilent = rms < 0.0001;
+                if (isSilent) silentChunks++;
+
                 const int16 = new Int16Array(input.length);
                 for (let i = 0; i < input.length; i++) {
                     const s = Math.max(-1, Math.min(1, input[i]));
                     int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
                 }
+
+                // Check if int16 has any non-zero values
+                let nonZeroCount = 0;
+                for (let i = 0; i < Math.min(100, int16.length); i++) {
+                    if (int16[i] !== 0) nonZeroCount++;
+                }
+
                 // Safari: send as JSON object with sample rate inline to avoid
                 // binary serialization issues and race with mic_sample_rate event.
                 // Chrome: send raw ArrayBuffer for best performance.
                 if (isSafari) {
-                    socket.emit('mic_audio_chunk', {
+                    const payload = {
                         sr: audioContext.sampleRate,
                         pcm: Array.from(int16),
-                    });
+                    };
+                    socket.emit('mic_audio_chunk', payload);
+                    if (chunkCount < 3) {
+                        console.log('[MicStream] Safari chunk emitted', {
+                            chunk: chunkCount,
+                            payloadKeys: Object.keys(payload),
+                            sr: payload.sr,
+                            pcmLen: payload.pcm.length,
+                            pcmFirst5: payload.pcm.slice(0, 5),
+                            pcmNonZero: nonZeroCount,
+                            rms: rms.toFixed(6),
+                        });
+                    }
                 } else {
                     socket.emit('mic_audio_chunk', int16.buffer);
                 }
 
                 chunkCount++;
                 if (chunkCount === 1) {
-                    console.log('[MicStream] First audio chunk sent', {
+                    console.log('[MicStream] ▶ First chunk', {
                         samples: int16.length,
                         sampleRate: audioContext.sampleRate,
                         ctxState: audioContext.state,
-                        socketConnected: socket.connected
+                        socketConnected: socket.connected,
+                        socketId: socket.id,
+                        rms: rms.toFixed(6),
+                        nonZeroIn100: nonZeroCount,
+                        isSafari,
                     });
                 }
-                if (chunkCount % 50 === 0) {
-                    console.log('[MicStream] chunks sent:', chunkCount, 'ctxState:', audioContext.state);
+                // Log every 10 seconds (~12 chunks/sec at 48kHz/4096)
+                if (chunkCount % 120 === 0) {
+                    const avgRms = totalRms / 120;
+                    console.log('[MicStream] 📊 Stats', {
+                        chunks: chunkCount,
+                        silentChunks,
+                        avgRms: avgRms.toFixed(6),
+                        ctxState: audioContext.state,
+                        streamActive: stream.active,
+                        trackState: stream.getAudioTracks()[0]?.readyState,
+                        socketConnected: socket.connected,
+                    });
+                    totalRms = 0;
                 }
             };
 
             source.connect(processor);
             processor.connect(audioContext.destination);
+            console.log('[MicStream] ScriptProcessor connected to graph');
 
             // Attach an AnalyserNode to the SAME AudioContext so the mic
             // level bar and the streaming ScriptProcessor share one context.
-            // Safari may refuse to deliver audio frames when two separate
-            // AudioContexts access the same mic device — merging them fixes
-            // the "bar shows levels but Gemini gets nothing" bug.
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 64;
             source.connect(analyser);
-            // Expose the analyser on a ref so the visualizer loop can read it
             micAnalyserRef.current = analyser;
+            console.log('[MicStream] AnalyserNode attached to same context');
 
-            // External suspension poller — Safari/visionOS can suspend the
-            // AudioContext outside the processor callback (deadlock: the
-            // onaudioprocess handler never fires so it can't self-resume).
+            // Listen for AudioContext state changes
+            audioContext.onstatechange = () => {
+                console.log('[MicStream] 🔔 AudioContext state changed →', audioContext.state);
+            };
+
+            // External suspension poller
             micSuspensionIntervalRef.current = setInterval(() => {
-                if (micAudioContextRef.current?.state === 'suspended') {
-                    console.log('[MicStream] AudioContext suspended externally, resuming…');
-                    micAudioContextRef.current.resume();
+                const ctx = micAudioContextRef.current;
+                if (!ctx) return;
+                if (ctx.state === 'suspended') {
+                    console.log('[MicStream] ⚠️ AudioContext suspended externally, resuming…');
+                    ctx.resume();
+                } else if (ctx.state === 'interrupted') {
+                    // Safari-specific state — occurs when another app grabs audio
+                    console.log('[MicStream] ⚠️ AudioContext interrupted, resuming…');
+                    ctx.resume();
                 }
             }, 1000);
 
             addMessage('System', 'Browser mic streaming enabled.');
+            console.log('[MicStream] === SETUP COMPLETE ===');
         } catch (err) {
-            console.error('[MicStream] failed:', err);
+            console.error('[MicStream] ❌ FAILED:', err, err?.stack);
             addMessage('System', `Mic streaming failed: ${err?.message ?? String(err)}`);
         }
     };

@@ -2210,50 +2210,87 @@ async def mic_audio_chunk(sid, data):
     """
     global audio_loop
     if not audio_loop:
+        print(f"[SERVER] mic_audio_chunk from {sid[:8]}… but audio_loop is None — dropping")
         return
     try:
+        # Track how many packets we've seen from this session
+        if sid not in _mic_bytes_counter:
+            _mic_bytes_counter[sid] = [0, time.monotonic(), 0]  # [bytes, last_log_time, packet_count]
+        counter = _mic_bytes_counter[sid]
+        # Migrate old 2-element counters from previous code
+        if len(counter) < 3:
+            counter.append(0)
+        counter[2] += 1
+        pkt_num = counter[2]
+
         if sid not in _mic_debug_seen:
-            # One-time debug to confirm browser audio is arriving.
+            # Verbose first-packet debug
             try:
                 dtype = type(data).__name__
                 dlen = len(data) if hasattr(data, "__len__") else None
                 sr = None
+                dict_keys = None
+                pcm_preview = None
                 if isinstance(data, dict):
                     sr = data.get("sample_rate") or data.get("sr")
+                    dict_keys = list(data.keys())
+                    if "pcm" in data and isinstance(data["pcm"], list):
+                        pcm_preview = data["pcm"][:5]
+                elif isinstance(data, (bytes, bytearray)) and len(data) >= 10:
+                    pcm_preview = list(data[:10])
                 print(
-                    f"[SERVER] mic_audio_chunk first packet: type={dtype} len={dlen} "
-                    f"sample_rate={sr} stored_sr={_mic_sample_rates.get(sid)} "
-                    f"external={getattr(audio_loop, 'use_external_audio', None)} "
-                    f"paused={getattr(audio_loop, 'paused', None)}"
+                    f"[SERVER] ========== FIRST MIC PACKET ==========\n"
+                    f"  sid:          {sid}\n"
+                    f"  type:         {dtype}\n"
+                    f"  len:          {dlen}\n"
+                    f"  dict_keys:    {dict_keys}\n"
+                    f"  sample_rate:  {sr}\n"
+                    f"  stored_sr:    {_mic_sample_rates.get(sid)}\n"
+                    f"  pcm_preview:  {pcm_preview}\n"
+                    f"  external:     {getattr(audio_loop, 'use_external_audio', None)}\n"
+                    f"  paused:       {getattr(audio_loop, 'paused', None)}\n"
+                    f"  out_queue:    {audio_loop.out_queue is not None if hasattr(audio_loop, 'out_queue') else '?'}\n"
+                    f"  queue_size:   {audio_loop.external_audio_queue.qsize() if hasattr(audio_loop, 'external_audio_queue') else '?'}\n"
+                    f"  ============================================"
                 )
-            except Exception:
-                print("[SERVER] mic_audio_chunk first packet: (failed to introspect)")
+            except Exception as ex:
+                print(f"[SERVER] mic_audio_chunk first packet: (failed to introspect: {ex})")
             _mic_debug_seen.add(sid)
 
         def _feed(pcm: bytes, sample_rate: int | None = None) -> None:
             # Gemini expects 16kHz PCM s16le mono; many browsers actually run 48k.
             target_rate = 16000
+            pre_len = len(pcm)
             if sample_rate and isinstance(sample_rate, int) and sample_rate > 0 and sample_rate != target_rate:
                 try:
                     state_pos = float(_mic_resample_state.get(sid, 0.0))
                     pcm, next_pos = _resample_s16le_mono(pcm, sample_rate, target_rate, state_pos)
                     _mic_resample_state[sid] = float(next_pos)
+                    if pkt_num <= 3:
+                        print(f"[SERVER] mic pkt#{pkt_num} resampled {sample_rate}→{target_rate}: {pre_len}B → {len(pcm)}B")
                 except Exception as e:
-                    print(f"[SERVER] mic_audio_chunk resample failed (sr={sample_rate}): {e}")
+                    print(f"[SERVER] mic_audio_chunk resample FAILED (sr={sample_rate}): {e}")
+                    import traceback; traceback.print_exc()
+                    return  # Don't feed bad data
+            if pkt_num <= 3:
+                # Check if audio is all-zero
+                is_silent = all(b == 0 for b in pcm[:100]) if len(pcm) >= 100 else all(b == 0 for b in pcm)
+                print(f"[SERVER] mic pkt#{pkt_num} → feed_external_audio({len(pcm)}B, sr={sample_rate}), silent={is_silent}, qsize={audio_loop.external_audio_queue.qsize()}")
             audio_loop.feed_external_audio(pcm)
 
         # Diagnostic: log effective sample rate every 5 seconds
         now = time.monotonic()
-        if sid not in _mic_bytes_counter:
-            _mic_bytes_counter[sid] = [0, now]
-        counter = _mic_bytes_counter[sid]
+        counter[0] = counter[0] + 0  # ensure counter[0] exists
 
         def _track_bytes(n: int) -> None:
             counter[0] += n
             if now - counter[1] >= 5.0:
-                bps = counter[0] / (now - counter[1])
+                elapsed = now - counter[1]
+                bps = counter[0] / elapsed
                 sr_eff = _mic_sample_rates.get(sid, "?")
-                print(f"[SERVER] mic {sid[:8]}… {bps:.0f} B/s, sr={sr_eff}")
+                qsize = audio_loop.external_audio_queue.qsize() if hasattr(audio_loop, 'external_audio_queue') else '?'
+                drops = getattr(audio_loop, '_external_audio_drops', 0)
+                print(f"[SERVER] mic {sid[:8]}… {bps:.0f} B/s, sr={sr_eff}, qsize={qsize}, drops={drops}, pkts={pkt_num}")
                 counter[0] = 0
                 counter[1] = now
 
