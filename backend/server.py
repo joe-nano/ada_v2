@@ -1121,6 +1121,286 @@ async def startup_event():
     except Exception as e:
         print(f"[AGENT ZERO] Warning: Failed to register endpoints: {e}")
 
+    # Start weekly dependency health check background task
+    asyncio.create_task(_deps_maintenance_loop())
+
+_DEPS_CHECK_INTERVAL_HOURS = int(os.environ.get("DEPS_CHECK_INTERVAL_HOURS", "168"))  # weekly
+
+_DEPS_AUTO_UPDATE = os.environ.get("DEPS_AUTO_UPDATE", "1") == "1"
+
+async def _deps_maintenance_loop():
+    """Background loop: periodically check for outdated deps, auto-update safe ones, notify Yoda."""
+    await asyncio.sleep(60)  # Wait for server to fully start
+    while True:
+        try:
+            print("[DEPS] Running scheduled dependency check...")
+            pip_outdated = await _check_pip_outdated()
+            npm_outdated = await _check_npm_outdated_root()
+            pnpm_outdated = await _check_pnpm_outdated()
+            details = {
+                "joda_pip": pip_outdated,
+                "joda_npm": npm_outdated,
+                "yoda_pnpm": pnpm_outdated,
+            }
+            total = sum(
+                len([p for p in pkgs if "error" not in p])
+                for pkgs in details.values()
+            )
+            summary = f"[DEPS] Scheduled check: {total} outdated package(s)"
+            print(summary)
+
+            update_results = None
+            if total > 0 and _DEPS_AUTO_UPDATE:
+                # Auto-apply safe minor/patch updates
+                print("[DEPS] Auto-applying safe (minor/patch) updates...")
+                try:
+                    import subprocess
+                    update_results = {}
+                    # pip
+                    req_file = os.path.join(_JODA_ROOT, "requirements.txt")
+                    if os.path.exists(req_file):
+                        proc = await asyncio.to_thread(
+                            subprocess.run,
+                            ["pip", "install", "--upgrade", "-r", req_file],
+                            capture_output=True, text=True, timeout=300, cwd=_JODA_ROOT,
+                        )
+                        update_results["joda_pip"] = {"ok": proc.returncode == 0}
+                    # npm (Joda frontend)
+                    proc = await asyncio.to_thread(
+                        subprocess.run, ["npm", "update"],
+                        capture_output=True, text=True, timeout=300, cwd=_JODA_ROOT,
+                    )
+                    update_results["joda_npm"] = {"ok": proc.returncode == 0}
+                    # pnpm (Yoda)
+                    if os.path.isdir(_YODA_ROOT):
+                        proc = await asyncio.to_thread(
+                            subprocess.run, ["pnpm", "update"],
+                            capture_output=True, text=True, timeout=300, cwd=_YODA_ROOT,
+                        )
+                        update_results["yoda_pnpm"] = {"ok": proc.returncode == 0}
+                    all_ok = all(r.get("ok") for r in update_results.values())
+                    summary += f" → Auto-update {'succeeded' if all_ok else 'had failures'}"
+                    print(f"[DEPS] Auto-update results: {update_results}")
+                except Exception as ue:
+                    print(f"[DEPS] Auto-update error: {ue}")
+                    summary += f" → Auto-update error: {ue}"
+
+            # Notify Joda frontend
+            try:
+                payload = {"summary": summary, "details": details, "scheduled": True}
+                if update_results:
+                    payload["update_results"] = update_results
+                await sio.emit("deps_status", payload)
+                await sio.emit("status", {"msg": summary})
+            except Exception:
+                pass
+
+            # Relay to Yoda so it can inform the user
+            yoda_url = os.environ.get("YODA_GATEWAY_URL", "http://localhost:18789")
+            yoda_token = os.environ.get("YODA_GATEWAY_TOKEN", "")
+            try:
+                import aiohttp
+                headers = {"Content-Type": "application/json"}
+                if yoda_token:
+                    headers["Authorization"] = f"Bearer {yoda_token}"
+                report = f"Dependency maintenance report: {summary}"
+                if update_results:
+                    failures = [k for k, v in update_results.items() if not v.get("ok")]
+                    if failures:
+                        report += f"\nFailed ecosystems: {', '.join(failures)}. Please investigate."
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        f"{yoda_url}/api/sessions/default/message",
+                        json={"message": report},
+                        headers=headers,
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as resp:
+                        if resp.status == 200:
+                            print(f"[DEPS] Relayed report to Yoda")
+                        else:
+                            print(f"[DEPS] Yoda relay returned {resp.status}")
+            except Exception as ye:
+                print(f"[DEPS] Could not relay to Yoda (may not be running): {ye}")
+
+        except Exception as e:
+            print(f"[DEPS] Maintenance loop error: {e}")
+        await asyncio.sleep(_DEPS_CHECK_INTERVAL_HOURS * 3600)
+
+# --- Yoda Activity Feed: receives all outbound messages Yoda sends ---
+# This makes Joda aware of everything Yoda communicates to users.
+
+_yoda_activity_log: list[dict] = []  # In-memory ring buffer
+_YODA_ACTIVITY_MAX = 500
+
+@app.post("/api/yoda/activity")
+async def api_yoda_activity(payload: dict):
+    """Receive an activity event from Yoda (outbound message, cron result, etc.)."""
+    import time as _time
+    event = {
+        "timestamp": _time.time(),
+        "type": (payload or {}).get("type", "message"),
+        "channel": (payload or {}).get("channel", "unknown"),
+        "to": (payload or {}).get("to", ""),
+        "text": (payload or {}).get("text", ""),
+        "media_urls": (payload or {}).get("media_urls", []),
+        "agent_id": (payload or {}).get("agent_id"),
+        "session_key": (payload or {}).get("session_key"),
+    }
+    _yoda_activity_log.append(event)
+    # Trim ring buffer
+    while len(_yoda_activity_log) > _YODA_ACTIVITY_MAX:
+        _yoda_activity_log.pop(0)
+
+    # Broadcast to Joda frontend
+    try:
+        await sio.emit("yoda_activity", event)
+    except Exception:
+        pass
+
+    # Persist to shared memory so Joda's agents can reference it
+    try:
+        memory_dir = Path("long_term_memory") / "yoda_activity"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        import json as _json
+        log_file = memory_dir / "recent_activity.jsonl"
+        with open(log_file, "a") as f:
+            f.write(_json.dumps(event) + "\n")
+        # Keep file from growing unbounded — rotate at ~1000 lines
+        try:
+            lines = log_file.read_text().strip().split("\n")
+            if len(lines) > 1000:
+                log_file.write_text("\n".join(lines[-500:]) + "\n")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+    return {"ok": True}
+
+@app.get("/api/yoda/activity")
+async def api_yoda_activity_get(limit: int = 50):
+    """Get recent Yoda activity (for Joda agents/UI to consume)."""
+    return {"ok": True, "events": _yoda_activity_log[-limit:]}
+
+# --- Shared Memory Bridge ---
+# Both Joda and Yoda can read/write each other's memory stores.
+
+_JODA_MEMORY_DIR = Path("long_term_memory")
+_YODA_AGENT_DIR = Path(_YODA_ROOT) / ".agents" if os.path.isdir(_YODA_ROOT) else None
+
+@app.post("/api/memory/read")
+async def api_memory_read(payload: dict):
+    """Read a memory file from either Joda or Yoda's memory store."""
+    source = (payload or {}).get("source", "joda")  # "joda" or "yoda"
+    path = (payload or {}).get("path", "")
+    if not path:
+        raise HTTPException(status_code=400, detail="Missing 'path'.")
+
+    if source == "joda":
+        base = _JODA_MEMORY_DIR
+    elif source == "yoda" and _YODA_AGENT_DIR:
+        base = _YODA_AGENT_DIR
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown source '{source}' or Yoda not found.")
+
+    # Security: resolve and validate path stays within base
+    target = (base / path).resolve()
+    if not str(target).startswith(str(base.resolve())):
+        raise HTTPException(status_code=403, detail="Path traversal not allowed.")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"File not found: {path}")
+    if target.is_dir():
+        # List directory contents
+        entries = []
+        for item in sorted(target.iterdir()):
+            entries.append({
+                "name": item.name,
+                "type": "dir" if item.is_dir() else "file",
+                "size": item.stat().st_size if item.is_file() else None,
+            })
+        return {"ok": True, "type": "directory", "entries": entries}
+    else:
+        content = target.read_text(errors="replace")
+        return {"ok": True, "type": "file", "content": content, "path": str(path)}
+
+@app.post("/api/memory/write")
+async def api_memory_write(payload: dict):
+    """Write to a memory file in either Joda or Yoda's memory store."""
+    source = (payload or {}).get("source", "joda")
+    path = (payload or {}).get("path", "")
+    content = (payload or {}).get("content", "")
+    append = (payload or {}).get("append", False)
+    if not path:
+        raise HTTPException(status_code=400, detail="Missing 'path'.")
+
+    if source == "joda":
+        base = _JODA_MEMORY_DIR
+    elif source == "yoda" and _YODA_AGENT_DIR:
+        base = _YODA_AGENT_DIR
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown source '{source}' or Yoda not found.")
+
+    target = (base / path).resolve()
+    if not str(target).startswith(str(base.resolve())):
+        raise HTTPException(status_code=403, detail="Path traversal not allowed.")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if append:
+        with open(target, "a") as f:
+            f.write(content)
+    else:
+        target.write_text(content)
+
+    return {"ok": True, "path": str(path), "size": target.stat().st_size}
+
+@app.post("/api/memory/search")
+async def api_memory_search(payload: dict):
+    """Search across both Joda and Yoda memory stores."""
+    query = (payload or {}).get("query", "").strip().lower()
+    if not query:
+        raise HTTPException(status_code=400, detail="Missing 'query'.")
+    scope = (payload or {}).get("scope", "all")  # "all", "joda", "yoda"
+    max_results = min((payload or {}).get("max_results", 20), 50)
+
+    results = []
+    dirs_to_search = []
+    if scope in ("all", "joda"):
+        dirs_to_search.append(("joda", _JODA_MEMORY_DIR))
+    if scope in ("all", "yoda") and _YODA_AGENT_DIR:
+        dirs_to_search.append(("yoda", _YODA_AGENT_DIR))
+
+    for source_name, base_dir in dirs_to_search:
+        if not base_dir.exists():
+            continue
+        for fpath in base_dir.rglob("*"):
+            if not fpath.is_file():
+                continue
+            if fpath.suffix not in (".txt", ".md", ".json", ".jsonl", ".log"):
+                continue
+            try:
+                content = fpath.read_text(errors="replace")
+                if query in content.lower():
+                    # Find matching lines
+                    matches = []
+                    for i, line in enumerate(content.split("\n"), 1):
+                        if query in line.lower():
+                            matches.append({"line": i, "text": line.strip()[:200]})
+                            if len(matches) >= 3:
+                                break
+                    results.append({
+                        "source": source_name,
+                        "path": str(fpath.relative_to(base_dir)),
+                        "matches": matches,
+                    })
+                    if len(results) >= max_results:
+                        break
+            except Exception:
+                continue
+        if len(results) >= max_results:
+            break
+
+    return {"ok": True, "results": results, "query": query}
+
 @app.get("/status")
 async def status():
     return {"status": "running", "service": "JODA Backend"}
@@ -1150,6 +1430,331 @@ async def relay_ask(payload: dict):
         return {"ok": True, "text": out}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"relay_ask failed: {e}")
+
+# --- Joda ↔ Yoda Bridge: Media Generation REST API ---
+# These endpoints expose Joda's multi-provider media pipeline over HTTP
+# so external services (Yoda gateway, etc.) can generate images/videos.
+
+@app.post("/api/generate/image")
+async def api_generate_image(payload: dict):
+    """Generate an image using Joda's multi-provider fallback chain."""
+    prompt = (payload or {}).get("prompt", "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Missing 'prompt'.")
+    try:
+        import media_generators
+        import json as _json, time as _time, base64 as _b64
+
+        result = await media_generators.generate_image(prompt)
+
+        if not result["success"]:
+            raise HTTPException(status_code=502, detail=f"All image providers failed: {result.get('error', 'unknown')}")
+
+        # Persist to Google Drive
+        persisted_path = None
+        persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR")
+        if persist_dir:
+            persist_images = Path(persist_dir) / "images"
+            persist_images.mkdir(parents=True, exist_ok=True)
+            persist_path = persist_images / result["filename"]
+            with open(persist_path, "wb") as f:
+                f.write(result["raw_bytes"])
+            meta_path = persist_images / (result["filename"] + ".json")
+            with open(meta_path, "w") as f:
+                _json.dump({"type": "image", "filename": result["filename"], "prompt": prompt, "provider": result["provider"], "timestamp": _time.time()}, f)
+            persisted_path = str(persist_path)
+            print(f"[API] [IMAGE] Persisted to {persist_path}")
+
+        # Emit to Joda frontend gallery
+        try:
+            await sio.emit('media_asset', {
+                "type": "image",
+                "data": result["data_url"],
+                "filename": result["filename"],
+                "prompt": prompt,
+                "model": result["provider"],
+            })
+        except Exception:
+            pass
+
+        return {
+            "ok": True,
+            "data_url": result["data_url"],
+            "filename": result["filename"],
+            "provider": result["provider"],
+            "persisted_path": persisted_path,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Image generation failed: {e}")
+
+@app.post("/api/generate/video")
+async def api_generate_video(payload: dict):
+    """Generate a video using Joda's multi-provider fallback chain."""
+    prompt = (payload or {}).get("prompt", "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Missing 'prompt'.")
+    try:
+        import media_generators
+        import json as _json, time as _time
+
+        result = await media_generators.generate_video(prompt)
+
+        if not result["success"]:
+            raise HTTPException(status_code=502, detail=f"All video providers failed: {result.get('error', 'unknown')}")
+
+        # Persist to Google Drive
+        persisted_path = None
+        persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR")
+        if persist_dir:
+            persist_videos = Path(persist_dir) / "videos"
+            persist_videos.mkdir(parents=True, exist_ok=True)
+            persist_path = persist_videos / result["filename"]
+            with open(persist_path, "wb") as f:
+                f.write(result["raw_bytes"])
+            meta_path = persist_videos / (result["filename"] + ".json")
+            with open(meta_path, "w") as f:
+                _json.dump({"type": "video", "filename": result["filename"], "prompt": prompt, "provider": result["provider"], "timestamp": _time.time()}, f)
+            persisted_path = str(persist_path)
+            print(f"[API] [VIDEO] Persisted to {persist_path}")
+
+        # Emit to Joda frontend gallery
+        try:
+            await sio.emit('media_asset', {
+                "type": "video",
+                "data": result["data_url"],
+                "filename": result["filename"],
+                "prompt": prompt,
+                "model": result["provider"],
+            })
+        except Exception:
+            pass
+
+        return {
+            "ok": True,
+            "data_url": result["data_url"],
+            "filename": result["filename"],
+            "provider": result["provider"],
+            "persisted_path": persisted_path,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Video generation failed: {e}")
+
+# --- Joda → Yoda Bridge: Query Yoda gateway ---
+# Allows Joda (or its agents) to instruct Yoda for business ops, cron management, etc.
+
+@app.post("/api/yoda/ask")
+async def api_yoda_ask(payload: dict):
+    """Relay a question/instruction to the Yoda gateway and return its response."""
+    text = (payload or {}).get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Missing 'text'.")
+    agent_id = (payload or {}).get("agent_id", "default")
+    yoda_url = os.environ.get("YODA_GATEWAY_URL", "http://localhost:18789")
+    yoda_token = os.environ.get("YODA_GATEWAY_TOKEN", "")
+    try:
+        import aiohttp
+        headers = {"Content-Type": "application/json"}
+        if yoda_token:
+            headers["Authorization"] = f"Bearer {yoda_token}"
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                f"{yoda_url}/api/sessions/{agent_id}/message",
+                json={"message": text},
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=120),
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    raise HTTPException(status_code=resp.status, detail=f"Yoda returned {resp.status}: {body[:500]}")
+                data = await resp.json()
+                return {"ok": True, "response": data}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Failed to reach Yoda gateway: {e}")
+
+# --- Dependency Health Monitoring ---
+# Automated module update checks for both Joda (Python) and Yoda (Node).
+
+_JODA_ROOT = str(Path(__file__).resolve().parent.parent)
+_YODA_ROOT = str(Path(__file__).resolve().parent.parent / "yoda")
+
+async def _check_pip_outdated() -> list[dict]:
+    """Check for outdated pip packages."""
+    import subprocess
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            ["pip", "list", "--outdated", "--format=json"],
+            capture_output=True, text=True, timeout=60,
+            cwd=_JODA_ROOT,
+        )
+        if proc.returncode == 0 and proc.stdout.strip():
+            import json as _json
+            return _json.loads(proc.stdout)
+    except Exception as e:
+        return [{"error": str(e)}]
+    return []
+
+async def _check_pnpm_outdated() -> list[dict]:
+    """Check for outdated pnpm packages in Yoda."""
+    import subprocess
+    try:
+        # pnpm outdated returns non-zero when there are outdated packages
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            ["pnpm", "outdated", "--format=json"],
+            capture_output=True, text=True, timeout=60,
+            cwd=_YODA_ROOT,
+        )
+        output = proc.stdout.strip()
+        if output:
+            import json as _json
+            try:
+                data = _json.loads(output)
+                # pnpm returns a dict keyed by package name
+                if isinstance(data, dict):
+                    return [{"name": k, **v} for k, v in data.items()]
+                return data if isinstance(data, list) else []
+            except Exception:
+                pass
+    except Exception as e:
+        return [{"error": str(e)}]
+    return []
+
+async def _check_npm_outdated_root() -> list[dict]:
+    """Check for outdated npm packages at project root (Joda frontend)."""
+    import subprocess
+    try:
+        proc = await asyncio.to_thread(
+            subprocess.run,
+            ["npm", "outdated", "--json"],
+            capture_output=True, text=True, timeout=60,
+            cwd=_JODA_ROOT,
+        )
+        output = proc.stdout.strip()
+        if output:
+            import json as _json
+            try:
+                data = _json.loads(output)
+                if isinstance(data, dict):
+                    return [{"name": k, **v} for k, v in data.items()]
+                return data if isinstance(data, list) else []
+            except Exception:
+                pass
+    except Exception as e:
+        return [{"error": str(e)}]
+    return []
+
+@app.post("/api/deps/check")
+async def api_deps_check(payload: dict = None):
+    """Check for outdated dependencies in both Joda (pip + npm) and Yoda (pnpm)."""
+    scope = (payload or {}).get("scope", "all")  # "all", "joda", "yoda"
+    results = {}
+    if scope in ("all", "joda"):
+        results["joda_pip"] = await _check_pip_outdated()
+        results["joda_npm"] = await _check_npm_outdated_root()
+    if scope in ("all", "yoda"):
+        results["yoda_pnpm"] = await _check_pnpm_outdated()
+
+    total_outdated = sum(
+        len([p for p in pkgs if "error" not in p])
+        for pkgs in results.values()
+    )
+    summary = f"{total_outdated} outdated package(s) found"
+
+    # Notify frontend
+    try:
+        await sio.emit("deps_status", {"summary": summary, "details": results})
+    except Exception:
+        pass
+
+    return {"ok": True, "summary": summary, "details": results}
+
+@app.post("/api/deps/update")
+async def api_deps_update(payload: dict):
+    """
+    Perform safe dependency updates.
+    - mode: "minor" (default, safe patch/minor), "all" (major too — use with caution)
+    - scope: "all", "joda", "yoda"
+    """
+    import subprocess
+    mode = (payload or {}).get("mode", "minor")
+    scope = (payload or {}).get("scope", "all")
+    results = {}
+
+    if scope in ("all", "joda"):
+        # pip: upgrade all packages with constraints
+        try:
+            cmd = ["pip", "install", "--upgrade"]
+            req_file = os.path.join(_JODA_ROOT, "requirements.txt")
+            if os.path.exists(req_file):
+                cmd += ["-r", req_file]
+                proc = await asyncio.to_thread(
+                    subprocess.run, cmd,
+                    capture_output=True, text=True, timeout=300,
+                    cwd=_JODA_ROOT,
+                )
+                results["joda_pip"] = {
+                    "ok": proc.returncode == 0,
+                    "output": (proc.stdout or "")[-500:],
+                    "error": (proc.stderr or "")[-500:] if proc.returncode != 0 else None,
+                }
+            else:
+                results["joda_pip"] = {"ok": True, "output": "No requirements.txt found, skipped"}
+        except Exception as e:
+            results["joda_pip"] = {"ok": False, "error": str(e)}
+
+        # npm: update at project root
+        try:
+            proc = await asyncio.to_thread(
+                subprocess.run,
+                ["npm", "update"],
+                capture_output=True, text=True, timeout=300,
+                cwd=_JODA_ROOT,
+            )
+            results["joda_npm"] = {
+                "ok": proc.returncode == 0,
+                "output": (proc.stdout or "")[-500:],
+                "error": (proc.stderr or "")[-500:] if proc.returncode != 0 else None,
+            }
+        except Exception as e:
+            results["joda_npm"] = {"ok": False, "error": str(e)}
+
+    if scope in ("all", "yoda"):
+        try:
+            cmd = ["pnpm", "update"]
+            if mode == "all":
+                cmd.append("--latest")
+            proc = await asyncio.to_thread(
+                subprocess.run, cmd,
+                capture_output=True, text=True, timeout=300,
+                cwd=_YODA_ROOT,
+            )
+            results["yoda_pnpm"] = {
+                "ok": proc.returncode == 0,
+                "output": (proc.stdout or "")[-500:],
+                "error": (proc.stderr or "")[-500:] if proc.returncode != 0 else None,
+            }
+        except Exception as e:
+            results["yoda_pnpm"] = {"ok": False, "error": str(e)}
+
+    all_ok = all(r.get("ok", False) for r in results.values())
+    summary = "All updates succeeded" if all_ok else "Some updates failed"
+
+    # Notify frontend
+    try:
+        await sio.emit("deps_status", {"summary": summary, "details": results, "action": "update"})
+    except Exception:
+        pass
+
+    return {"ok": all_ok, "summary": summary, "details": results}
 
 @sio.event
 async def connect(sid, environ):
