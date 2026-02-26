@@ -2,6 +2,7 @@ import asyncio
 import base64
 import io
 import os
+from pathlib import Path
 import sys
 import traceback
 from dotenv import load_dotenv
@@ -1300,6 +1301,20 @@ class AudioLoop:
                     f.write(result["raw_bytes"])
                 print(f"[JODA DEBUG] [IMAGE] Saved to {save_path} (via {result['provider']})")
 
+                # Persist to Google Drive
+                persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR")
+                if persist_dir:
+                    import json as _json, time as _time
+                    persist_images = Path(persist_dir) / "images"
+                    persist_images.mkdir(parents=True, exist_ok=True)
+                    persist_path = persist_images / result["filename"]
+                    with open(persist_path, "wb") as f:
+                        f.write(result["raw_bytes"])
+                    meta_path = persist_images / (result["filename"] + ".json")
+                    with open(meta_path, "w") as f:
+                        _json.dump({"type": "image", "filename": result["filename"], "prompt": prompt, "provider": result["provider"], "timestamp": _time.time()}, f)
+                    print(f"[JODA DEBUG] [IMAGE] Persisted to {persist_path}")
+
                 if self.on_image_status:
                     self.on_image_status({
                         "status": "done",
@@ -1358,6 +1373,20 @@ class AudioLoop:
                 with open(save_path, "wb") as f:
                     f.write(result["raw_bytes"])
                 print(f"[JODA DEBUG] [VIDEO] Saved to {save_path} (via {result['provider']})")
+
+                # Persist to Google Drive
+                persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR")
+                if persist_dir:
+                    import json as _json, time as _time
+                    persist_videos = Path(persist_dir) / "videos"
+                    persist_videos.mkdir(parents=True, exist_ok=True)
+                    persist_path = persist_videos / result["filename"]
+                    with open(persist_path, "wb") as f:
+                        f.write(result["raw_bytes"])
+                    meta_path = persist_videos / (result["filename"] + ".json")
+                    with open(meta_path, "w") as f:
+                        _json.dump({"type": "video", "filename": result["filename"], "prompt": prompt, "provider": result["provider"], "timestamp": _time.time()}, f)
+                    print(f"[JODA DEBUG] [VIDEO] Persisted to {persist_path}")
 
                 if self.on_image_status:
                     self.on_image_status({

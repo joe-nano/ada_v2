@@ -1582,6 +1582,59 @@ async def monitor_printers_loop():
         await asyncio.sleep(2) # Update every 2 seconds for responsiveness
 
 @sio.event
+async def load_persisted_media(sid):
+    """Load previously generated media from Google Drive persistent storage."""
+    persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR")
+    if not persist_dir:
+        await sio.emit('persisted_media', [], to=sid)
+        return
+    import json as _json
+    assets = []
+    for media_type in ("images", "videos", "audio"):
+        folder = os.path.join(persist_dir, media_type)
+        if not os.path.isdir(folder):
+            continue
+        for fname in sorted(os.listdir(folder), reverse=True):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(os.path.join(folder, fname)) as f:
+                    meta = _json.load(f)
+                media_file = os.path.join(folder, meta["filename"])
+                if not os.path.exists(media_file):
+                    continue
+                meta["_persistedPath"] = media_file
+                assets.append(meta)
+            except Exception:
+                continue
+    # Sort by timestamp descending, limit to 100
+    assets.sort(key=lambda a: a.get("timestamp", 0), reverse=True)
+    assets = assets[:100]
+    await sio.emit('persisted_media', assets, to=sid)
+    print(f"Sent {len(assets)} persisted media assets to frontend")
+
+@sio.event
+async def serve_persisted_file(sid, data):
+    """Serve a persisted media file as base64 data URL."""
+    import base64, mimetypes
+    file_path = data.get("path", "")
+    persist_dir = os.environ.get("MEDIA_PERSISTENCE_DIR", "")
+    # Security: only serve files from the persistence directory
+    if not file_path or not persist_dir or not os.path.realpath(file_path).startswith(os.path.realpath(persist_dir)):
+        await sio.emit('persisted_file', {"error": "Invalid path"}, to=sid)
+        return
+    if not os.path.exists(file_path):
+        await sio.emit('persisted_file', {"error": "File not found"}, to=sid)
+        return
+    mime, _ = mimetypes.guess_type(file_path)
+    if not mime:
+        mime = "application/octet-stream"
+    with open(file_path, "rb") as f:
+        raw = f.read()
+    data_url = f"data:{mime};base64,{base64.b64encode(raw).decode()}"
+    await sio.emit('persisted_file', {"data": data_url, "path": file_path}, to=sid)
+
+@sio.event
 async def stop_audio(sid):
     global audio_loop
     if audio_loop:

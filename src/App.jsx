@@ -1045,6 +1045,28 @@ function App() {
             setShowMediaGallery(true);
         });
 
+        // Load persisted media from Google Drive on connect
+        socket.emit('load_persisted_media');
+        socket.on('persisted_media', (assets) => {
+            if (assets && assets.length > 0) {
+                setMediaAssets(prev => {
+                    const existing = new Set(prev.map(a => a.filename));
+                    const persisted = assets
+                        .filter(a => !existing.has(a.filename))
+                        .map(a => ({ ...a, _persisted: true, _receivedAt: a.timestamp ? a.timestamp * 1000 : Date.now() }));
+                    return [...prev, ...persisted].slice(-100);
+                });
+                console.log(`[JODA] Loaded ${assets.length} persisted media assets from Drive`);
+            }
+        });
+        socket.on('persisted_file', (response) => {
+            if (response.data && response.path) {
+                setMediaAssets(prev => prev.map(a =>
+                    a._persistedPath === response.path ? { ...a, data: response.data } : a
+                ));
+            }
+        });
+
         // Image generation lifecycle: generating → done/error
         socket.on('image_status', (data) => {
             if (data.status === 'generating') {
@@ -1272,6 +1294,8 @@ function App() {
             socket.off('cad_status');
             socket.off('browser_frame');
             socket.off('media_asset');
+            socket.off('persisted_media');
+            socket.off('persisted_file');
             socket.off('image_status');
             socket.off('transcription');
             socket.off('tool_confirmation_request');
@@ -2320,6 +2344,7 @@ function App() {
                                     assets={mediaAssets}
                                     onClose={() => setShowMediaGallery(false)}
                                     onClearAll={() => setMediaAssets([])}
+                                    socket={socket}
                                 />
                             ),
                             xrContent: (

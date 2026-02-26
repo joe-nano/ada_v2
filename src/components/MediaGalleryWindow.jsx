@@ -7,7 +7,7 @@ const FILTERS = [
     { key: 'video', label: 'Videos', icon: Film },
 ];
 
-const MediaGalleryWindow = ({ assets = [], onClose, onClearAll }) => {
+const MediaGalleryWindow = ({ assets = [], onClose, onClearAll, socket }) => {
     const [filter, setFilter] = useState('all');
     const [lightboxIndex, setLightboxIndex] = useState(null);
 
@@ -16,7 +16,14 @@ const MediaGalleryWindow = ({ assets = [], onClose, onClearAll }) => {
         return assets.filter(a => (a.type || 'image') === filter);
     }, [assets, filter]);
 
-    const openLightbox = useCallback((idx) => setLightboxIndex(idx), []);
+    const openLightbox = useCallback((idx) => {
+        const asset = filtered[idx];
+        // Lazy-load persisted assets from Drive
+        if (asset && asset._persisted && !asset.data && asset._persistedPath && socket) {
+            socket.emit('serve_persisted_file', { path: asset._persistedPath });
+        }
+        setLightboxIndex(idx);
+    }, [filtered, socket]);
     const closeLightbox = useCallback(() => setLightboxIndex(null), []);
 
     const lightboxAsset = lightboxIndex !== null ? filtered[lightboxIndex] : null;
@@ -104,7 +111,12 @@ const MediaGalleryWindow = ({ assets = [], onClose, onClearAll }) => {
                                 onClick={() => openLightbox(idx)}
                                 className="relative aspect-square rounded-lg overflow-hidden group/thumb bg-black/50 border border-white/5 hover:border-amber-500/30 transition-colors"
                             >
-                                {(asset.type || 'image') === 'video' ? (
+                                {asset._persisted && !asset.data ? (
+                                    <div className="w-full h-full flex flex-col items-center justify-center bg-black/60 text-gray-400">
+                                        {(asset.type || 'image') === 'video' ? <Film size={20} /> : <Image size={20} />}
+                                        <span className="text-[8px] mt-1 text-amber-400/60">Drive</span>
+                                    </div>
+                                ) : (asset.type || 'image') === 'video' ? (
                                     <video
                                         src={asset.url || asset.data}
                                         poster={asset.poster}
